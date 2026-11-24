@@ -1,2 +1,2 @@
 # blunderless
-neww chess coach
+new chess coach, side project
