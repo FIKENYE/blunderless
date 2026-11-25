@@ -1,144 +1,219 @@
 /* ============================================================
-   Blunderless — app.js  v2
-   Piece-movement animations via chessboard.js moveSpeed.
-   Wood-thud sounds synthesised with Web Audio API (no files).
+   Blunderless — app.js
+   - Custom 4-color SVG piece set (#FFF8F0 / #4B2E2B / #C08552)
+   - Creamy / thocky mechanical keyboard Web Audio sound engine
+   - Chess.com-style layout bindings (clocks, ratings, quality counts)
    ============================================================ */
 
 'use strict';
 
-// ── Sound system ────────────────────────────────────────────
+// ── Custom 4-Color Coffee SVG Piece Set ─────────────────────
+const PIECE_SVGS = (() => {
+  const W_FILL = '#FFF8F0';
+  const W_STRK = '#4B2E2B';
+  const B_FILL = '#4B2E2B';
+  const B_DET = '#C08552';
+
+  const makeSvg = (inner) =>
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 45 45">${inner}</svg>`;
+
+  const pieces = {
+    wP: makeSvg(`<path d="M22.5 9c-2.21 0-4 1.79-4 4 0 .89.29 1.71.78 2.38C17.33 16.5 16 18.59 16 21c0 2.03.94 3.84 2.41 5.03-3 1.06-7.41 5.55-7.41 13.47h23c0-7.92-4.41-12.41-7.41-13.47 1.47-1.19 2.41-3 2.41-5.03 0-2.41-1.33-4.5-3.28-5.62.49-.67.78-1.49.78-2.38 0-2.21-1.79-4-4-4z" fill="${W_FILL}" stroke="${W_STRK}" stroke-width="2" stroke-linecap="round"/>`),
+    bP: makeSvg(`<path d="M22.5 9c-2.21 0-4 1.79-4 4 0 .89.29 1.71.78 2.38C17.33 16.5 16 18.59 16 21c0 2.03.94 3.84 2.41 5.03-3 1.06-7.41 5.55-7.41 13.47h23c0-7.92-4.41-12.41-7.41-13.47 1.47-1.19 2.41-3 2.41-5.03 0-2.41-1.33-4.5-3.28-5.62.49-.67.78-1.49.78-2.38 0-2.21-1.79-4-4-4z" fill="${B_FILL}" stroke="${B_DET}" stroke-width="1.6" stroke-linecap="round"/>`),
+
+    wR: makeSvg(`<g fill="${W_FILL}" stroke="${W_STRK}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 39h27v-3H9v3zM12 36v-4h21v4H12zM11 14V9h4v2h5V9h5v2h5V9h4v5"/><path d="M34 14l-3 3H14l-3-3"/><path d="M31 17v12.5H14V17"/><path d="M31 29.5l1.5 2.5h-20l1.5-2.5"/><path d="M11 14h23" fill="none"/></g>`),
+    bR: makeSvg(`<g fill="${B_FILL}" stroke="${B_DET}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 39h27v-3H9v3zM12.5 32l1.5-2.5h17l1.5 2.5h-20zM12 36v-4h21v4H12z"/><path d="M14 29.5v-13h17v13H14z"/><path d="M14 16.5L11 14h23l-3 2.5H14zM11 14V9h4v2h5V9h5v2h5V9h4v5H11z"/></g>`),
+
+    wN: makeSvg(`<g fill="${W_FILL}" stroke="${W_STRK}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10c10.5 1 16.5 8 16 29H15c0-9 10-6.5 8-21"/><path d="M24 18c.38 2.91-5.55 7.37-8 9-3 2-2.82 4.34-5 4-1.042-.94 1.41-3.04 0-3-1 0 .19 1.23-1 2-1 0-4.003 1-4-4 0-2 6-12 6-12s1.89-1.9 2-3.5c-.73-.994-.5-2-.5-3 1-1 3 2.5 3 2.5h2s.78-1.992 2.5-3c1 0 1 3 1 3"/><circle cx="15" cy="14.5" r="1" fill="${W_STRK}"/></g>`),
+    bN: makeSvg(`<g fill="${B_FILL}" stroke="${B_DET}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10c10.5 1 16.5 8 16 29H15c0-9 10-6.5 8-21"/><path d="M24 18c.38 2.91-5.55 7.37-8 9-3 2-2.82 4.34-5 4-1.042-.94 1.41-3.04 0-3-1 0 .19 1.23-1 2-1 0-4.003 1-4-4 0-2 6-12 6-12s1.89-1.9 2-3.5c-.73-.994-.5-2-.5-3 1-1 3 2.5 3 2.5h2s.78-1.992 2.5-3c1 0 1 3 1 3"/><circle cx="15" cy="14.5" r="1.2" fill="${B_DET}" stroke="none"/></g>`),
+
+    wB: makeSvg(`<g fill="${W_FILL}" stroke="${W_STRK}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 36c3.39-.97 10.11.43 13.5-2 3.39 2.43 10.11 1.03 13.5 2 0 0 1.65.54 3 2-.68.97-1.65.99-3 .5-3.39-.97-10.11.46-13.5-1-3.39 1.46-10.11.03-13.5 1-1.354.49-2.323.47-3-.5 1.354-1.94 3-2 3-2z"/><path d="M15 32c2.5 2.5 12.5 2.5 15 0 .5-1.5 0-2 0-2 0-2.5-2.5-4-2.5-4 5.5-1.5 6-11.5-5-15.5-11 4-10.5 14-5 15.5 0 0-2.5 1.5-2.5 4 0 0-.5.5 0 2z"/><circle cx="22.5" cy="8" r="2.5"/><path d="M17.5 26h10M15 30h15M22.5 15.5v5M20 18h5" fill="none"/></g>`),
+    bB: makeSvg(`<g fill="${B_FILL}" stroke="${B_DET}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 36c3.39-.97 10.11.43 13.5-2 3.39 2.43 10.11 1.03 13.5 2 0 0 1.65.54 3 2-.68.97-1.65.99-3 .5-3.39-.97-10.11.46-13.5-1-3.39 1.46-10.11.03-13.5 1-1.354.49-2.323.47-3-.5 1.354-1.94 3-2 3-2z"/><path d="M15 32c2.5 2.5 12.5 2.5 15 0 .5-1.5 0-2 0-2 0-2.5-2.5-4-2.5-4 5.5-1.5 6-11.5-5-15.5-11 4-10.5 14-5 15.5 0 0-2.5 1.5-2.5 4 0 0-.5.5 0 2z"/><circle cx="22.5" cy="8" r="2.5"/><path d="M17.5 26h10M15 30h15M22.5 15.5v5M20 18h5" fill="none"/></g>`),
+
+    wQ: makeSvg(`<g fill="${W_FILL}" stroke="${W_STRK}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="12" r="2.2"/><circle cx="14" cy="9" r="2.2"/><circle cx="22.5" cy="8" r="2.2"/><circle cx="31" cy="9" r="2.2"/><circle cx="39" cy="12" r="2.2"/><path d="M9 26c8.5-1.5 21-1.5 27 0l2-12-7 11V11l-5.5 13.5-3-15-3 15-5.5-14V25L7 14l2 12z"/><path d="M9 26c0 2 1.5 2 2.5 4 1 1.5 1 1 .5 3.5-1.5 1-1.5 2.5-1.5 2.5-1.5 1.5.5 2.5.5 2.5 6.5 1 16.5 1 23 0 0 0 1.5-1 0-2.5 0 0 .5-1.5-1-2.5-.5-2.5-.5-2 .5-3.5 1-2 2.5-2 2.5-4-8.5-1.5-18.5-1.5-27 0z"/><path d="M11.5 30c3.5-1 18.5-1 22 0M12 33.5c6-1 15-1 21 0" fill="none"/></g>`),
+    bQ: makeSvg(`<g fill="${B_FILL}" stroke="${B_DET}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="12" r="2.2"/><circle cx="14" cy="9" r="2.2"/><circle cx="22.5" cy="8" r="2.2"/><circle cx="31" cy="9" r="2.2"/><circle cx="39" cy="12" r="2.2"/><path d="M9 26c8.5-1.5 21-1.5 27 0l2.5-12.5L31 25l-.3-14.1-5.2 13.6-3-14.5-3 14.5-5.2-13.6L14 25 6.5 13.5 9 26z"/><path d="M9 26c0 2 1.5 2 2.5 4 1 1.5 1 1 .5 3.5-1.5 1-1.5 2.5-1.5 2.5-1.5 1.5.5 2.5.5 2.5 6.5 1 16.5 1 23 0 0 0 1.5-1 0-2.5 0 0 .5-1.5-1-2.5-.5-2.5-.5-2 .5-3.5 1-2 2.5-2 2.5-4-8.5-1.5-18.5-1.5-27 0z"/><path d="M11.5 30c3.5-1 18.5-1 22 0M12 33.5c6-1 15-1 21 0" fill="none"/></g>`),
+
+    wK: makeSvg(`<g fill="${W_FILL}" stroke="${W_STRK}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22.5 11.63V6M20 8h5" fill="none"/><path d="M22.5 25s4.5-7.5 3-10.5c0 0-1-2.5-3-2.5s-3 2.5-3 2.5c-1.5 3 3 10.5 3 10.5"/><path d="M11.5 37c5.5 3.5 15.5 3.5 21 0v-7s9-4.5 6-10.5c-4-6.5-13.5-3.5-16 4V27v-3.5c-3.5-7.5-13-10.5-16-4-3 6 5 10 5 10V37z"/><path d="M11.5 30c5.5-3 15.5-3 21 0m-21 3.5c5.5-3 15.5-3 21 0m-21 3.5c5.5-3 15.5-3 21 0" fill="none"/></g>`),
+    bK: makeSvg(`<g fill="${B_FILL}" stroke="${B_DET}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M22.5 11.63V6M20 8h5" fill="none"/><path d="M22.5 25s4.5-7.5 3-10.5c0 0-1-2.5-3-2.5s-3 2.5-3 2.5c-1.5 3 3 10.5 3 10.5"/><path d="M11.5 37c5.5 3.5 15.5 3.5 21 0v-7s9-4.5 6-10.5c-4-6.5-13.5-3.5-16 4V27v-3.5c-3.5-7.5-13-10.5-16-4-3 6 5 10 5 10V37z"/><path d="M11.5 30c5.5-3 15.5-3 21 0m-21 3.5c5.5-3 15.5-3 21 0m-21 3.5c5.5-3 15.5-3 21 0" fill="none"/></g>`),
+  };
+
+  const uris = {};
+  for (const [k, svg] of Object.entries(pieces)) {
+    uris[k] = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  }
+  return uris;
+})();
+
+// ── Creamy Mechanical Keyboard Sound System ─────────────────
 /**
- * Generates chess sounds programmatically using the Web Audio API.
- * No audio files needed. All sounds are wood-like noise transients.
+ * Synthesises lubed linear / tactile mechanical switch "thocks"
+ * using Web Audio API:
+ *  1. Low-pass filtered housing body resonance (triangle pitch sweep)
+ *  2. Soft damped POM/PBT stem bottom-out pop (bandpass noise)
  */
 class SoundSystem {
-  constructor() {
-    this._ctx = null;
-  }
+  constructor() { this._ctx = null; }
 
   _ctx_get() {
     if (!this._ctx) {
       this._ctx = new (window.AudioContext || window.webkitAudioContext)();
     }
-    // Resume on first user gesture (browser autoplay policy).
     if (this._ctx.state === 'suspended') this._ctx.resume();
     return this._ctx;
   }
 
   /**
-   * Wood transient: shaped white noise with exponential decay.
-   * pitch controls how 'thuddy' (low) vs 'clicky' (high) the sound is.
+   * Single creamy keystroke thock.
+   * @param {number} baseFreq   Starting housing pitch in Hz (150-230 = creamy)
+   * @param {number} endFreq    Resting bottom-out pitch in Hz (45-80)
+   * @param {number} stemFreq   Filtered tactile pop center in Hz (380-620)
+   * @param {number} gainLevel  Master gain (0.0 - 1.0)
+   * @param {number} dur        Decay duration in seconds
    */
-  _wood(pitch = 1.0, vol = 0.6, dur = 0.09) {
-    const ctx      = this._ctx_get();
-    const bufSize  = Math.floor(ctx.sampleRate * dur);
-    const buffer   = ctx.createBuffer(1, bufSize, ctx.sampleRate);
-    const data     = buffer.getChannelData(0);
+  _thock(baseFreq = 195, endFreq = 65, stemFreq = 460, gainLevel = 0.55, dur = 0.065) {
+    const ctx = this._ctx_get();
+    const now = ctx.currentTime;
+    // Slight organic pitch variance (+/- 4%) like typing across keys
+    const jitter = 0.96 + Math.random() * 0.08;
 
+    // 1. Warm housing thump (low-passed triangle wave)
+    const osc = ctx.createOscillator();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(baseFreq * jitter, now);
+    osc.frequency.exponentialRampToValueAtTime(endFreq * jitter, now + dur);
+
+    const bodyLp = ctx.createBiquadFilter();
+    bodyLp.type = 'lowpass';
+    bodyLp.frequency.setValueAtTime(420, now);
+
+    const bodyGain = ctx.createGain();
+    bodyGain.gain.setValueAtTime(gainLevel, now);
+    bodyGain.gain.exponentialRampToValueAtTime(0.001, now + dur + 0.015);
+
+    osc.connect(bodyLp);
+    bodyLp.connect(bodyGain);
+    bodyGain.connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + dur + 0.02);
+
+    // 2. Muffled tactile stem pop (short warm bandpass impulse)
+    const popDur = 0.022;
+    const bufSize = Math.floor(ctx.sampleRate * popDur);
+    const buffer = ctx.createBuffer(1, bufSize, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
     for (let i = 0; i < bufSize; i++) {
-      // Noise shaped with exponential decay and pitch-controlled filter via
-      // a simple IIR-like smoothing (higher pitch = less smoothing = clickier).
-      data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufSize, 2 + pitch * 3);
+      data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufSize, 3.2);
     }
 
-    const src  = ctx.createBufferSource();
-    src.buffer = buffer;
+    const noise = ctx.createBufferSource();
+    noise.buffer = buffer;
 
-    // Band-pass-like effect: a biquad filter tuned to 'wood' frequency range.
-    const filter      = ctx.createBiquadFilter();
-    filter.type       = 'bandpass';
-    filter.frequency.value = 300 + pitch * 1200;
-    filter.Q.value    = 0.8;
+    const stemBp = ctx.createBiquadFilter();
+    stemBp.type = 'bandpass';
+    stemBp.frequency.setValueAtTime(stemFreq * jitter, now);
+    stemBp.Q.setValueAtTime(2.4, now);
 
-    const gain     = ctx.createGain();
-    gain.gain.setValueAtTime(vol, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur + 0.03);
+    const popGain = ctx.createGain();
+    popGain.gain.setValueAtTime(gainLevel * 0.42, now);
+    popGain.gain.exponentialRampToValueAtTime(0.001, now + popDur);
 
-    src.connect(filter);
-    filter.connect(gain);
-    gain.connect(ctx.destination);
-    src.start(ctx.currentTime);
-    src.stop(ctx.currentTime + dur + 0.05);
+    noise.connect(stemBp);
+    stemBp.connect(popGain);
+    popGain.connect(ctx.destination);
+    noise.start(now);
+    noise.stop(now + popDur + 0.005);
   }
 
-  /** Quiet click for a standard piece move. */
+  /** Standard move: single smooth creamy keystroke */
   move() {
-    this._wood(1.6, 0.5, 0.07);
+    this._thock(195, 66, 460, 0.55, 0.062);
   }
 
-  /** Louder double-thud for a capture. */
+  /** Capture: crisp keycap pop followed by deep bottom-out thock */
   capture() {
-    this._wood(0.6, 0.75, 0.10);
-    setTimeout(() => this._wood(0.4, 0.5, 0.09), 40);
+    this._thock(240, 95, 580, 0.42, 0.042);
+    setTimeout(() => this._thock(160, 50, 390, 0.68, 0.078), 34);
   }
 
-  /** Sharp ring for a check. */
-  check() {
-    const ctx   = this._ctx_get();
-    const osc   = ctx.createOscillator();
-    const gain  = ctx.createGain();
-    osc.type    = 'sine';
-    osc.frequency.setValueAtTime(1050, ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(700, ctx.currentTime + 0.25);
-    gain.gain.setValueAtTime(0.28, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.28);
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.start(ctx.currentTime);
-    osc.stop(ctx.currentTime + 0.3);
-    // Add the thud on top.
-    setTimeout(() => this._wood(1.5, 0.45, 0.07), 15);
-  }
-
-  /** Two-part click for castling (rook then king). */
+  /** Castling: two-finger key roll */
   castle() {
-    this._wood(1.4, 0.5, 0.07);
-    setTimeout(() => this._wood(1.6, 0.5, 0.07), 130);
+    this._thock(210, 72, 490, 0.50, 0.055);
+    setTimeout(() => this._thock(180, 60, 430, 0.55, 0.065), 68);
   }
 
-  /** Muted thud for game end. */
+  /** Check: muted warm keycap chime + thock */
+  check() {
+    const ctx = this._ctx_get();
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const lp = ctx.createBiquadFilter();
+    const g = ctx.createGain();
+
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(587.33, now); // D5
+    osc.frequency.exponentialRampToValueAtTime(440, now + 0.14); // A4
+
+    lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(950, now);
+
+    g.gain.setValueAtTime(0.22, now);
+    g.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
+
+    osc.connect(lp);
+    lp.connect(g);
+    g.connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.17);
+
+    this._thock(205, 68, 480, 0.5, 0.06);
+  }
+
+  /** Game end: deep spacebar bottom-out thock */
   gameEnd() {
-    this._wood(0.3, 0.9, 0.18);
+    this._thock(135, 42, 320, 0.78, 0.13);
   }
 }
 
 const sounds = new SoundSystem();
 
-// ── State ──────────────────────────────────────────────────
+// ── State ───────────────────────────────────────────────────
 const state = {
-  game:         null,   // chess.js instance used for board replaying
-  moves:        [],     // array of analysed move objects from /api/analyse-pgn
-  plyIndex:     0,      // 0 = initial position
-  initialFen:   null,
-  initialEval:  null,
-  orientation:  'white',
-  board:        null,   // chessboard.js instance
+  moves: [],
+  plyIndex: 0,
+  initialFen: null,
+  initialEval: null,
+  orientation: 'white',
+  board: null,
+  headers: {
+    white: 'White', black: 'Black',
+    white_elo: '', black_elo: '',
+    initial_clock: '--:--',
+  },
 };
 
-// ── DOM helpers ────────────────────────────────────────────
-const $  = id => document.getElementById(id);
+// ── DOM Helpers ─────────────────────────────────────────────
+const $ = id => document.getElementById(id);
 
 const evalBlackFill = $('eval-black-fill');
 const evalWhiteFill = $('eval-white-fill');
-const evalLabelT    = $('eval-label-top');
-const evalLabelB    = $('eval-label-bot');
+const evalLabelT = $('eval-label-top');
+const evalLabelB = $('eval-label-bot');
+const engineMeta = $('engine-meta');
+const engineEval = $('engine-eval');
 const moveTableBody = $('move-tbody');
-const emptyMoves    = $('empty-moves');
-const gameHeaders   = $('game-headers');
-const pgnInput      = $('pgn-input');
-const statusMsg     = $('status-msg');
-const analyseBtn    = $('analyse-btn');
-const playerWhite   = $('player-white');
-const playerBlack   = $('player-black');
-const gamesList     = $('games-list');
+const emptyMoves = $('empty-moves');
+const gameHeaders = $('game-headers');
+const pgnInput = $('pgn-input');
+const statusMsg = $('status-msg');
+const analyseBtn = $('analyse-btn');
+const gamesList = $('games-list');
 
-// ── Classification meta ─────────────────────────────────────
 const CLF_META = {
-  best:       { cls: 'clf-best',       title: 'Best move'   },
-  good:       { cls: 'clf-good',       title: 'Good move'   },
-  inaccuracy: { cls: 'clf-inaccuracy', title: 'Inaccuracy'  },
-  mistake:    { cls: 'clf-mistake',    title: 'Mistake'     },
-  blunder:    { cls: 'clf-blunder',    title: 'Blunder'     },
+  best: { cls: 'clf-best', title: 'Best move' },
+  good: { cls: 'clf-good', title: 'Good move' },
+  inaccuracy: { cls: 'clf-inaccuracy', title: 'Inaccuracy' },
+  mistake: { cls: 'clf-mistake', title: 'Mistake' },
+  blunder: { cls: 'clf-blunder', title: 'Blunder' },
 };
 
 function clfDot(clf) {
@@ -146,77 +221,125 @@ function clfDot(clf) {
   return `<span class="clf-dot ${m.cls}" title="${m.title}"></span>`;
 }
 
-// ── Eval bar ───────────────────────────────────────────────
+// ── Eval Bar & Engine Strip ─────────────────────────────────
 function setEvalBar(score) {
   let cp;
+  let formatted;
+
   if (score.type === 'mate') {
     cp = score.value > 0 ? 10000 : -10000;
-    const mv = Math.abs(score.value);
-    const lbl = `M${mv}`;
+    const prefix = score.value > 0 ? '+' : '-';
+    formatted = `${prefix}M${Math.abs(score.value)}`;
     if (score.value > 0) {
       evalLabelT.textContent = '';
-      evalLabelB.textContent = lbl;
+      evalLabelB.textContent = `M${Math.abs(score.value)}`;
     } else {
-      evalLabelT.textContent = lbl;
+      evalLabelT.textContent = `M${Math.abs(score.value)}`;
       evalLabelB.textContent = '';
     }
   } else {
     cp = score.value;
     const disp = (Math.abs(cp) / 100).toFixed(1);
+    const disp2 = (Math.abs(cp) / 100).toFixed(2);
     if (cp >= 0) {
+      formatted = '+' + disp2;
       evalLabelT.textContent = '';
       evalLabelB.textContent = '+' + disp;
     } else {
+      formatted = '-' + disp2;
       evalLabelT.textContent = '-' + disp;
       evalLabelB.textContent = '';
     }
   }
 
-  // Sigmoid-like map from centipawns to 0–100%.
-  const pct      = Math.round(50 + 50 * Math.tanh(cp / 350));
-  const blackPct = 100 - pct;
-  evalBlackFill.style.height = blackPct + '%';
-  evalWhiteFill.style.height = pct + '%';
+  engineEval.textContent = formatted;
+
+  const pct = Math.round(50 + 50 * Math.tanh(cp / 350));
+  if (state.orientation === 'white') {
+    evalBlackFill.style.height = (100 - pct) + '%';
+    evalWhiteFill.style.height = pct + '%';
+  } else {
+    evalBlackFill.style.height = pct + '%';
+    evalWhiteFill.style.height = (100 - pct) + '%';
+  }
 }
 
-// ── Board initialisation ────────────────────────────────────
+// ── Player Bars & Clocks ────────────────────────────────────
+function syncPlayerBars(ply) {
+  const topColor = state.orientation === 'white' ? 'black' : 'white';
+  const botColor = state.orientation;
+
+  const setBar = (prefix, color) => {
+    const nameEl = $(`${prefix}-name`);
+    const ratingEl = $(`${prefix}-rating`);
+    const avatarEl = $(`${prefix}-avatar`);
+    const clockEl = $(`${prefix}-clock`);
+
+    nameEl.textContent = state.headers[color] || (color === 'white' ? 'White' : 'Black');
+    const elo = state.headers[`${color}_elo`];
+    ratingEl.textContent = elo ? `(${elo})` : '';
+    avatarEl.textContent = color === 'white' ? 'W' : 'B';
+    avatarEl.className = `player-avatar avatar-${color}`;
+
+    let clk = state.headers.initial_clock || '--:--';
+    for (let i = ply - 1; i >= 0; i--) {
+      if (state.moves[i] && state.moves[i].color === color && state.moves[i].clock) {
+        clk = state.moves[i].clock;
+        break;
+      }
+    }
+    clockEl.textContent = clk;
+
+    const turnColor = (ply % 2 === 0) ? 'white' : 'black';
+    clockEl.classList.toggle('active-clock', turnColor === color && state.moves.length > 0);
+  };
+
+  setBar('top', topColor);
+  setBar('bot', botColor);
+}
+
+// ── Board Initialisation & 1:1 Responsive Sizing ────────────
 function initBoard() {
   state.board = Chessboard('board', {
-    position:    'start',
+    position: 'start',
     orientation: state.orientation,
-    pieceTheme:  'https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png',
-    draggable:   false,
-    moveSpeed:   180,     // ms — smooth piece-slide animation
-    snapbackSpeed: 150,
-    snapSpeed:   80,
+    pieceTheme: (piece) => PIECE_SVGS[piece],
+    draggable: false,
+    moveSpeed: 150,
+    snapbackSpeed: 120,
+    snapSpeed: 60,
   });
 
-  // Dynamically fit the board to available width.
-  const boardEl = document.getElementById('board');
-  const resize  = () => {
-    const avail = boardEl.parentElement.clientWidth - 48;
-    const max   = Math.min(avail, parseInt(
-      getComputedStyle(document.documentElement).getPropertyValue('--board-max') || '600'
-    ));
-    boardEl.style.width = max + 'px';
+  const boardEl = $('board');
+  const evalShell = $('eval-bar-shell');
+
+  const resize = () => {
+    const stage = document.querySelector('.left-stage');
+    const availH = stage.clientHeight - 124;
+    const availW = stage.clientWidth - 84;
+    const size = Math.max(280, Math.min(availH, availW, 640));
+
+    const snapped = Math.floor(size / 8) * 8;
+    boardEl.style.width = snapped + 'px';
+    boardEl.style.height = snapped + 'px';
+    evalShell.style.height = snapped + 'px';
     state.board.resize();
   };
+
   window.addEventListener('resize', resize);
   resize();
 }
 
-// ── Last-move highlighting ──────────────────────────────────
+// ── Last-Move Highlighting ──────────────────────────────────
 let _lastHighlightSquares = [];
 
 function highlightLastMove(fromSq, toSq) {
-  // Remove old highlights.
   _lastHighlightSquares.forEach(sq => {
     $('board').querySelectorAll(`[data-square="${sq}"]`).forEach(el => {
       el.classList.remove('highlight-last');
     });
   });
   _lastHighlightSquares = [];
-
   if (!fromSq || !toSq) return;
 
   [fromSq, toSq].forEach(sq => {
@@ -231,118 +354,119 @@ function highlightLastMove(fromSq, toSq) {
 function goToPly(ply) {
   if (ply < 0 || ply > state.moves.length) return;
 
-  const prevPly   = state.plyIndex;
-  state.plyIndex  = ply;
+  const prevPly = state.plyIndex;
+  state.plyIndex = ply;
 
-  // Rebuild board to this ply position.
   const tmpGame = new Chess();
   if (state.initialFen) tmpGame.load(state.initialFen);
   for (let i = 0; i < ply; i++) {
     tmpGame.move(state.moves[i].san);
   }
 
-  // Animate: use chessboard.js's built-in animated position change.
-  state.board.position(tmpGame.fen(), true /* animate */);
+  state.board.position(tmpGame.fen(), true);
 
-  // Determine source/target squares for highlight & sound.
-  if (ply > 0 && ply > prevPly) {
-    // Moving forward: play the move at ply-1 (index ply-1 is 1-based).
-    const moveData  = state.moves[ply - 1];
-    const uci       = moveData.uci;
-    const fromSq    = uci.slice(0, 2);
-    const toSq      = uci.slice(2, 4);
-    highlightLastMove(fromSq, toSq);
-    playMoveSound(moveData, tmpGame);
-  } else if (ply < prevPly && ply > 0) {
-    // Moving backward: show highlight for the move now at top.
-    const moveData  = state.moves[ply - 1];
-    const uci       = moveData.uci;
+  if (ply > 0) {
+    const moveData = state.moves[ply - 1];
+    const uci = moveData.uci;
     highlightLastMove(uci.slice(0, 2), uci.slice(2, 4));
+    if (ply > prevPly) playMoveSound(moveData, tmpGame);
+    $('opening-best').textContent = moveData.best_move_san || '—';
   } else {
     highlightLastMove(null, null);
   }
 
-  // Update eval bar.
   const evalScore = ply === 0 ? state.initialEval : state.moves[ply - 1].eval_after;
   if (evalScore) setEvalBar(evalScore);
 
-  // Highlight the active move row.
-  document.querySelectorAll('.move-row').forEach(r => r.classList.remove('active'));
+  syncPlayerBars(ply);
+
+  document.querySelectorAll('.move-cell').forEach(c => c.classList.remove('active-ply'));
   if (ply > 0) {
-    const activeRow = document.querySelector(`.move-row[data-ply="${ply}"]`);
-    if (activeRow) {
-      activeRow.classList.add('active');
-      activeRow.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    const activeCell = document.querySelector(`.move-cell[data-ply="${ply}"]`);
+    if (activeCell) {
+      activeCell.classList.add('active-ply');
+      activeCell.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     }
   }
 }
 
-// ── Sound selection ─────────────────────────────────────────
 function playMoveSound(moveData, boardAfter) {
   const san = moveData.san;
-
-  if (boardAfter.in_checkmate()) {
-    sounds.gameEnd();
-  } else if (boardAfter.in_check()) {
-    sounds.check();
-  } else if (san.includes('O-O')) {
-    sounds.castle();
-  } else if (san.includes('x')) {
-    sounds.capture();
-  } else {
-    sounds.move();
-  }
+  if (boardAfter.in_checkmate()) sounds.gameEnd();
+  else if (boardAfter.in_check()) sounds.check();
+  else if (san.includes('O-O')) sounds.castle();
+  else if (san.includes('x')) sounds.capture();
+  else sounds.move();
 }
 
-// ── Move list ───────────────────────────────────────────────
+// ── Move List & Summary Counts ──────────────────────────────
 function renderMoveList(movesData) {
   moveTableBody.innerHTML = '';
   emptyMoves.classList.add('hidden');
+
+  const counts = { best: 0, inaccuracy: 0, mistake: 0, blunder: 0 };
+  for (const m of movesData) {
+    if (counts[m.classification] !== undefined) counts[m.classification]++;
+  }
+  $('cnt-best').textContent = counts.best;
+  $('cnt-inacc').textContent = counts.inaccuracy;
+  $('cnt-mistake').textContent = counts.mistake;
+  $('cnt-blunder').textContent = counts.blunder;
 
   for (let i = 0; i < movesData.length; i += 2) {
     const wm = movesData[i];
     const bm = movesData[i + 1];
     const tr = document.createElement('tr');
-    tr.className   = 'move-row';
-    tr.dataset.ply = wm.ply;   // row highlighted on white move by default
+    tr.className = 'move-row';
 
     const tdNum = document.createElement('td');
-    tdNum.className     = 'move-num';
-    tdNum.textContent   = wm.move_number;
+    tdNum.className = 'move-num';
+    tdNum.textContent = `${wm.move_number}.`;
     tr.appendChild(tdNum);
 
-    const makeCell = (move) => {
-      const td  = document.createElement('td');
+    const makeMoveTd = (move) => {
+      const td = document.createElement('td');
       if (!move) return td;
-      const div       = document.createElement('div');
-      div.className   = 'move-cell';
+      const div = document.createElement('div');
+      div.className = 'move-cell';
       div.dataset.ply = move.ply;
-      div.innerHTML   = `${clfDot(move.classification)}<span>${move.san}</span>`;
+      div.innerHTML = `${clfDot(move.classification)}<span>${move.san}</span>`;
       div.addEventListener('click', () => goToPly(move.ply));
       td.appendChild(div);
       return td;
     };
 
-    tr.appendChild(makeCell(wm));
-    tr.appendChild(makeCell(bm));
+    tr.appendChild(makeMoveTd(wm));
+    tr.appendChild(makeMoveTd(bm));
+
+    // Stacked right-hand clock column matching Chess.com screenshot
+    const tdClks = document.createElement('td');
+    tdClks.className = 'move-clocks-col';
+    const wClk = wm?.clock || '';
+    const bClk = bm?.clock || '';
+    tdClks.innerHTML = `${wClk}${wClk && bClk ? '<br/>' : ''}${bClk}`;
+    tr.appendChild(tdClks);
+
     moveTableBody.appendChild(tr);
   }
 }
 
-// ── Analyse from input ──────────────────────────────────────
+// ── Analysis Requests ───────────────────────────────────────
 async function runAnalysis() {
   const raw = pgnInput.value.trim();
-  if (!raw) return setStatus('Paste a PGN or FEN first.', 'error');
+  if (!raw) {
+    switchTab('info');
+    return setStatus('Paste a PGN or FEN above first.', 'error');
+  }
 
-  setStatus('<span class="spinner"></span> analysing…');
+  setStatus('<span class="spinner"></span> Analysing...');
   analyseBtn.disabled = true;
 
-  // Heuristic: FEN = single line, exactly 6 tokens.
   const isFen = !raw.includes('\n') && raw.split(/\s+/).length === 6;
 
   try {
     if (isFen) await analyseFen(raw);
-    else        await analysePgn(raw);
+    else await analysePgn(raw);
   } catch (err) {
     setStatus(err.message, 'error');
   } finally {
@@ -353,51 +477,68 @@ async function runAnalysis() {
 async function analyseFen(fen) {
   const res = await fetchApi('/api/analyse-fen', 'POST', { fen, depth: 12 });
 
-  state.initialFen  = fen;
+  state.initialFen = fen;
   state.initialEval = res.engine.score;
-  state.moves       = [];
-  state.plyIndex    = 0;
+  state.moves = [];
+  state.plyIndex = 0;
+  state.headers = { white: 'White', black: 'Black', white_elo: '', black_elo: '', initial_clock: '--:--' };
+
+  engineMeta.textContent = `Stockfish · d${res.depth || 12}`;
+  $('opening-banner').textContent = 'Custom FEN Position';
+  $('opening-eco-badge').textContent = '';
+  $('opening-best').textContent = res.engine.best_move_san || '—';
 
   state.board.position(fen, true);
   setEvalBar(res.engine.score);
+  syncPlayerBars(0);
   moveTableBody.innerHTML = '';
   gameHeaders.classList.add('hidden');
-  emptyMoves.textContent = `FEN loaded. Best: ${res.engine.best_move_san || '—'}`;
+  emptyMoves.textContent = `FEN loaded. Best move: ${res.engine.best_move_san || '—'}`;
   emptyMoves.classList.remove('hidden');
   highlightLastMove(null, null);
   setStatus('FEN analysed · depth 12', 'ok');
+  switchTab('moves');
 }
 
 async function analysePgn(pgn) {
   const res = await fetchApi('/api/analyse-pgn', 'POST', { pgn, depth: 10 });
 
-  state.initialFen  = res.initial_fen;
+  state.initialFen = res.initial_fen;
   state.initialEval = res.initial_eval;
-  state.moves       = res.moves;
-  state.plyIndex    = 0;
+  state.moves = res.moves;
+  state.plyIndex = 0;
+  state.headers = res.headers;
 
-  playerWhite.textContent = res.headers.white || 'White';
-  playerBlack.textContent = res.headers.black || 'Black';
+  engineMeta.textContent = `Stockfish · d${res.depth || 10}`;
 
-  if (res.headers.white || res.headers.black) {
-    gameHeaders.classList.remove('hidden');
-    gameHeaders.innerHTML =
-      `<div class="header-players">${res.headers.white} vs ${res.headers.black}</div>` +
-      `<div>${res.headers.event || ''} · ${res.headers.date || ''} · ${res.headers.result || ''}</div>`;
-  }
+  gameHeaders.classList.remove('hidden');
+  gameHeaders.innerHTML = `
+    <div class="info-row"><span class="info-key">MATCHUP</span><span class="info-val">${res.headers.white} vs ${res.headers.black}</span></div>
+    <div class="info-row"><span class="info-key">EVENT / DATE</span><span class="info-val">${res.headers.event || '—'} · ${res.headers.date || '—'}</span></div>
+    <div class="info-row"><span class="info-key">TIME CONTROL</span><span class="info-val">${res.headers.time_control || '—'}</span></div>
+    <div class="info-row"><span class="info-key">RESULT</span><span class="info-val">${res.headers.result || '*'}</span></div>
+  `;
+
+  const openingTitle = res.headers.opening || 'Starting Position';
+  $('opening-banner').textContent = openingTitle;
+  $('opening-eco-badge').textContent = res.headers.eco || '';
+  $('opening-eco').textContent = res.headers.eco || '—';
+  $('opening-name').textContent = openingTitle;
+  $('opening-best').textContent = res.moves[0]?.best_move_san || '—';
 
   renderMoveList(res.moves);
   emptyMoves.classList.add('hidden');
   goToPly(0);
-  setStatus(`Game loaded · ${res.moves.length} half-moves`, 'ok');
+  setStatus(`Loaded · ${res.moves.length} half-moves`, 'ok');
+  switchTab('moves');
 }
 
-// ── Chess.com game loader ───────────────────────────────────
+// ── Chess.com Loader ────────────────────────────────────────
 async function loadChessComGames() {
   const username = $('chesscom-input').value.trim();
   if (!username) return;
 
-  gamesList.innerHTML = '<div class="empty-state"><span class="spinner"></span> loading…</div>';
+  gamesList.innerHTML = '<div class="empty-state"><span class="spinner"></span> Fetching games...</div>';
   switchTab('games');
 
   try {
@@ -416,17 +557,17 @@ function renderGameCards(games, currentUser) {
   gamesList.innerHTML = '';
 
   for (const g of games) {
-    const me      = g.white.username.toLowerCase() === currentUser.toLowerCase();
-    const myRes   = me ? g.white.result : g.black.result;
+    const me = g.white.username.toLowerCase() === currentUser.toLowerCase();
+    const myRes = me ? g.white.result : g.black.result;
     const oppName = me ? g.black.username : g.white.username;
-    const myRat   = me ? g.white.rating : g.black.rating;
-    const oppRat  = me ? g.black.rating : g.white.rating;
+    const myRat = me ? g.white.rating : g.black.rating;
+    const oppRat = me ? g.black.rating : g.white.rating;
 
     const cls = myRes === 'win' ? 'result-win'
-              : (myRes === 'resigned' || myRes === 'checkmated' || myRes === 'timeout') ? 'result-loss'
-              : 'result-draw';
+      : (myRes === 'resigned' || myRes === 'checkmated' || myRes === 'timeout') ? 'result-loss'
+        : 'result-draw';
     const lbl = myRes === 'win' ? 'Win'
-              : (myRes === 'resigned' || myRes === 'checkmated') ? 'Loss' : 'Draw';
+      : (myRes === 'resigned' || myRes === 'checkmated' || myRes === 'timeout') ? 'Loss' : 'Draw';
     const date = g.end_time ? new Date(g.end_time * 1000).toLocaleDateString() : '';
 
     const card = document.createElement('div');
@@ -440,14 +581,13 @@ function renderGameCards(games, currentUser) {
       </div>`;
     card.addEventListener('click', () => {
       pgnInput.value = g.pgn;
-      switchTab('moves');
       runAnalysis();
     });
     gamesList.appendChild(card);
   }
 }
 
-// ── Tab switching ───────────────────────────────────────────
+// ── Tabs & Utilities ────────────────────────────────────────
 function switchTab(name) {
   document.querySelectorAll('.tab-btn').forEach(btn =>
     btn.classList.toggle('active', btn.dataset.tab === name));
@@ -458,7 +598,6 @@ function switchTab(name) {
   });
 }
 
-// ── Utilities ───────────────────────────────────────────────
 function setStatus(html, type) {
   statusMsg.innerHTML = html;
   statusMsg.className = 'status-msg' + (type ? ' ' + type : '');
@@ -475,23 +614,31 @@ async function fetchApi(path, method = 'GET', body = null) {
   return res.json();
 }
 
+function flipBoard() {
+  state.orientation = state.orientation === 'white' ? 'black' : 'white';
+  state.board.flip();
+  syncPlayerBars(state.plyIndex);
+  const evalScore = state.plyIndex === 0
+    ? state.initialEval
+    : state.moves[state.plyIndex - 1]?.eval_after;
+  if (evalScore) setEvalBar(evalScore);
+}
+
 // ── Bootstrap ───────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   initBoard();
-  setEvalBar({ type: 'cp', value: 20 });
+  state.initialEval = { type: 'cp', value: 20 };
+  setEvalBar(state.initialEval);
+  syncPlayerBars(0);
 
-  // Navigation buttons.
   $('btn-start').addEventListener('click', () => goToPly(0));
-  $('btn-prev' ).addEventListener('click', () => goToPly(state.plyIndex - 1));
-  $('btn-next' ).addEventListener('click', () => goToPly(state.plyIndex + 1));
-  $('btn-end'  ).addEventListener('click', () => goToPly(state.moves.length));
-  $('btn-flip' ).addEventListener('click', () => {
-    state.orientation = state.orientation === 'white' ? 'black' : 'white';
-    state.board.flip();
-  });
+  $('btn-prev').addEventListener('click', () => goToPly(state.plyIndex - 1));
+  $('btn-next').addEventListener('click', () => goToPly(state.plyIndex + 1));
+  $('btn-end').addEventListener('click', () => goToPly(state.moves.length));
+  $('btn-flip').addEventListener('click', flipBoard);
 
-  $('analyse-btn'  ).addEventListener('click', runAnalysis);
-  $('chesscom-btn' ).addEventListener('click', loadChessComGames);
+  $('analyse-btn').addEventListener('click', runAnalysis);
+  $('chesscom-btn').addEventListener('click', loadChessComGames);
 
   pgnInput.addEventListener('keydown', e => {
     if (e.key === 'Enter' && e.ctrlKey) runAnalysis();
@@ -503,20 +650,16 @@ document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('.tab-btn').forEach(btn =>
     btn.addEventListener('click', () => switchTab(btn.dataset.tab)));
 
-  // Keyboard shortcuts.
   document.addEventListener('keydown', e => {
     if (document.activeElement === pgnInput) return;
     if (document.activeElement === $('chesscom-input')) return;
 
     switch (e.key) {
-      case 'ArrowLeft':  goToPly(state.plyIndex - 1); break;
+      case 'ArrowLeft': goToPly(state.plyIndex - 1); break;
       case 'ArrowRight': goToPly(state.plyIndex + 1); break;
-      case 'Home':       goToPly(0);                  break;
-      case 'End':        goToPly(state.moves.length); break;
-      case 'f': case 'F':
-        state.orientation = state.orientation === 'white' ? 'black' : 'white';
-        state.board.flip();
-        break;
+      case 'Home': goToPly(0); break;
+      case 'End': goToPly(state.moves.length); break;
+      case 'f': case 'F': flipBoard(); break;
     }
   });
 });

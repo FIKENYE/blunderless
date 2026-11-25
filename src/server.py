@@ -3,7 +3,7 @@ FastAPI backend for Blunderless.
 
 Serves the web UI and exposes endpoints for:
 - Analysing a single FEN (Layer 1 + Layer 2)
-- Parsing and evaluating a full PGN game move-by-move
+- Parsing and evaluating a full PGN game move-by-move (including clocks & headers)
 - Fetching the last 5 games for a Chess.com username
 """
 
@@ -62,17 +62,26 @@ def _get_app_engine(request: Request) -> Optional[Any]:
     return getattr(request.app.state, "engine", None)
 
 
+def _format_clock(seconds: Optional[float]) -> Optional[str]:
+    """Convert remaining seconds from PGN [%clk] tag to MM:SS or H:MM:SS."""
+    if seconds is None:
+        return None
+    total = max(0, int(round(seconds)))
+    hrs, rem = divmod(total, 3600)
+    mins, secs = divmod(rem, 60)
+    if hrs > 0:
+        return f"{hrs}:{mins:02d}:{secs:02d}"
+    return f"{mins:02d}:{secs:02d}"
+
+
 def parse_and_analyse_pgn(
     pgn_text: str,
     depth: int = 10,
     engine: Optional[Any] = None,
 ) -> dict[str, Any]:
     """
-    Parse a PGN string and evaluate each move sequentially.
-
-    Optimization: instead of running Stockfish twice per move (before + after),
-    we reuse the 'after' evaluation of move N as the 'before' evaluation of move N+1.
-    This cuts total engine calls in half.
+    Parse a PGN string and evaluate each move sequentially, extracting
+    [%clk] timestamps, ratings, and opening tags.
     """
     if not pgn_text or not pgn_text.strip():
         raise ValueError("PGN text cannot be empty.")
@@ -81,8 +90,8 @@ def parse_and_analyse_pgn(
     if game is None:
         raise ValueError("Could not parse PGN.")
 
-    mainline = list(game.mainline_moves())
-    if not mainline:
+    nodes = list(game.mainline())
+    if not nodes:
         raise ValueError("PGN contains no moves.")
 
     board = game.board()
@@ -91,10 +100,12 @@ def parse_and_analyse_pgn(
     initial_eval = prev_info["score"]
 
     moves_out: list[dict[str, Any]] = []
-    for ply_idx, move in enumerate(mainline, start=1):
+    for ply_idx, node in enumerate(nodes, start=1):
+        move = node.move
         mover_color = board.turn
         move_uci = move.uci()
         move_san = board.san(move)
+        clk_seconds = node.clock()
 
         board.push(move)
         after_fen = board.fen()
@@ -115,6 +126,8 @@ def parse_and_analyse_pgn(
                 "uci": move_uci,
                 "san": move_san,
                 "fen": after_fen,
+                "clock": _format_clock(clk_seconds),
+                "clock_seconds": clk_seconds,
                 "best_move": prev_info["best_move"],
                 "best_move_san": prev_info["best_move_san"],
                 "eval_after": after_info["score"],
@@ -124,16 +137,31 @@ def parse_and_analyse_pgn(
         )
         prev_info = after_info
 
+    # Derive initial clock from TimeControl header (e.g. "600+0" -> "10:00") if present
+    tc = game.headers.get("TimeControl", "")
+    initial_clock = None
+    if tc and tc[0].isdigit():
+        base_sec = int(tc.split("+")[0])
+        initial_clock = _format_clock(base_sec)
+
     headers = {
         "event": game.headers.get("Event", ""),
+        "site": game.headers.get("Site", ""),
         "white": game.headers.get("White", "White"),
         "black": game.headers.get("Black", "Black"),
+        "white_elo": game.headers.get("WhiteElo", ""),
+        "black_elo": game.headers.get("BlackElo", ""),
         "result": game.headers.get("Result", "*"),
         "date": game.headers.get("Date", ""),
+        "eco": game.headers.get("ECO", ""),
+        "opening": game.headers.get("Opening", ""),
+        "time_control": tc,
+        "initial_clock": initial_clock,
     }
 
     return {
         "headers": headers,
+        "depth": depth,
         "initial_fen": initial_fen,
         "initial_eval": initial_eval,
         "moves": moves_out,
@@ -146,7 +174,7 @@ def index():
     index_file = WEB_DIR / "index.html"
     if not index_file.exists():
         return JSONResponse(
-            {"message": "Blunderless API is running. Frontend UI (Stage 2) not built yet."}
+            {"message": "Blunderless API is running. Frontend UI not built yet."}
         )
     return FileResponse(str(index_file))
 
@@ -160,7 +188,7 @@ def analyse_fen_endpoint(payload: FenRequest, request: Request) -> dict[str, Any
         features = extract_features(payload.fen, engine_data=engine_data)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return {"engine": engine_data, "features": features}
+    return {"depth": payload.depth, "engine": engine_data, "features": features}
 
 
 @app.post("/api/analyse-pgn")
