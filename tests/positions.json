@@ -1,0 +1,22 @@
+{
+  "starting_position": {
+    "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+    "description": "Standard starting position with equal material and no tactics."
+  },
+  "hanging_knight": {
+    "fen": "4k3/8/8/4n3/8/8/4Q3/4K3 w - - 0 1",
+    "description": "White is up a Queen vs Knight (+6) and Black's knight on e5 is hanging."
+  },
+  "pinned_knight": {
+    "fen": "4k3/8/8/4n3/8/8/8/4R1K1 w - - 0 1",
+    "description": "Black's knight on e5 is pinned to the e8 king by White's rook on e1."
+  },
+  "pawn_structure": {
+    "fen": "4k3/8/8/8/4p3/2P5/P1P5/4K3 w - - 0 1",
+    "description": "White has doubled pawns on the c-file and isolated pawns; Black has a passed e4 pawn."
+  },
+  "exposed_king": {
+    "fen": "6k1/5ppp/8/8/8/7q/6PP/6K1 w - - 0 1",
+    "description": "White's king on g1 is missing its f2 shield pawn and Black's queen on h3 attacks the king ring."
+  }
+}
