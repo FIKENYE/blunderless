@@ -1,6 +1,7 @@
 /* =========================================================
-   Blunderless — Coffee Terminal Chess
+   Blunderless — Coffee Terminal Chess (v4)
    4-Color Palette: #FFF8F0 / #C08552 / #8C5A3C / #4B2E2B
+   High-legibility sizing for Departure Mono
    ========================================================= */
 
 :root {
@@ -19,12 +20,12 @@
   --c-mistake: #C08552;
   --c-blunder: #A62626;
 
-  --topbar-h: 46px;
+  --topbar-h: 48px;
   --eval-w: 28px;
   --eval-gap: 8px;
   --board-offset: 36px;
   /* --eval-w + --eval-gap */
-  --sidebar-w: 370px;
+  --sidebar-w: 380px;
 
   --font: 'Departure Mono', monospace;
 }
@@ -39,12 +40,14 @@
 
 html,
 body {
+  width: 100%;
   height: 100%;
   overflow: hidden;
   font-family: var(--font);
   background: var(--canvas);
   color: var(--espresso);
   font-size: 14px;
+  line-height: 1.4;
 }
 
 body {
@@ -55,6 +58,7 @@ body {
 /* ── Topbar ── */
 .topbar {
   height: var(--topbar-h);
+  width: 100%;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -65,7 +69,7 @@ body {
 }
 
 .logo {
-  font-size: 17px;
+  font-size: 18px;
   letter-spacing: 0.14em;
   color: var(--espresso);
 }
@@ -79,8 +83,8 @@ body {
 /* ── Inputs & Buttons ── */
 .text-input {
   font-family: var(--font);
-  font-size: 13px;
-  padding: 5px 10px;
+  font-size: 14px;
+  padding: 6px 10px;
   border: 1px solid var(--espresso);
   border-radius: 2px;
   background: var(--canvas);
@@ -106,6 +110,7 @@ body {
   border-radius: 2px;
   cursor: pointer;
   letter-spacing: 0.04em;
+  white-space: nowrap;
 }
 
 .btn:disabled {
@@ -139,6 +144,7 @@ body {
 /* ── Workspace ── */
 .workspace {
   display: flex;
+  width: 100%;
   flex: 1;
   overflow: hidden;
 }
@@ -146,6 +152,7 @@ body {
 /* ── Left Stage ── */
 .left-stage {
   flex: 1;
+  min-width: 0;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -165,7 +172,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 5px 10px;
+  padding: 6px 12px;
   border: 1px solid var(--espresso);
   background: var(--canvas);
   border-radius: 2px;
@@ -181,9 +188,9 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
-  font-size: 12px;
+  width: 24px;
+  height: 24px;
+  font-size: 13px;
   border: 1px solid var(--espresso);
 }
 
@@ -198,12 +205,12 @@ body {
 }
 
 .player-name {
-  font-size: 14px;
+  font-size: 15px;
   color: var(--espresso);
 }
 
 .player-rating {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--roast);
   font-variant-numeric: tabular-nums;
 }
@@ -260,7 +267,7 @@ body {
   left: 0;
   right: 0;
   text-align: center;
-  font-size: 10px;
+  font-size: 11px;
   font-variant-numeric: tabular-nums;
   pointer-events: none;
   padding: 3px 0;
@@ -299,14 +306,15 @@ body {
   pointer-events: none !important;
 }
 
+/* Clean flat square tint for last move (no glowing ring around pieces) */
 .highlight-last {
-  box-shadow: inset 0 0 0 4px var(--caramel) !important;
-  background-color: rgba(192, 133, 82, 0.35) !important;
+  background-color: rgba(192, 133, 82, 0.45) !important;
+  box-shadow: inset 0 0 0 2px var(--espresso) !important;
 }
 
 .chess-board .notation-322f9 {
   font-family: var(--font) !important;
-  font-size: 10px !important;
+  font-size: 11px !important;
 }
 
 .chess-board .white-1e1d7 .notation-322f9 {
@@ -317,9 +325,11 @@ body {
   color: var(--canvas) !important;
 }
 
-/* ── Right Sidebar (Chess.com structure) ── */
+/* ── Right Sidebar ── */
 .right-sidebar {
   width: var(--sidebar-w);
+  min-width: var(--sidebar-w);
+  max-width: var(--sidebar-w);
   border-left: 2px solid var(--espresso);
   background: var(--canvas);
   display: flex;
@@ -349,7 +359,7 @@ body {
 .tab-btn.active {
   color: var(--espresso);
   border-bottom-color: var(--caramel);
-  background: rgba(192, 133, 82, 0.14);
+  background: rgba(192, 133, 82, 0.16);
 }
 
 .tab-btn:hover:not(.active) {
@@ -361,39 +371,47 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 7px 12px;
+  padding: 8px 12px;
   border-bottom: 1px solid var(--roast);
   background: rgba(140, 90, 60, 0.1);
-  font-size: 12px;
+  font-size: 13px;
   flex-shrink: 0;
 }
 
 .engine-badge {
   background: var(--espresso);
   color: var(--canvas);
-  padding: 2px 6px;
+  padding: 2px 8px;
   font-variant-numeric: tabular-nums;
 }
 
 .engine-name {
-  color: var(--roast);
+  color: var(--espresso);
 }
 
 .opening-strip {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 6px 12px;
+  gap: 8px;
+  padding: 7px 12px;
   border-bottom: 1px solid var(--espresso);
-  font-size: 12px;
+  font-size: 13px;
   color: var(--espresso);
   background: var(--canvas);
   flex-shrink: 0;
 }
 
+#opening-banner {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .eco-tag {
   color: var(--roast);
-  font-size: 11px;
+  font-size: 12px;
+  flex-shrink: 0;
 }
 
 /* Panes */
@@ -426,7 +444,7 @@ body {
   gap: 10px;
 }
 
-/* Move Table (Chess.com style: Move # | White | Black | Clocks stacked on right) */
+/* Move Table */
 .move-table {
   width: 100%;
   border-collapse: collapse;
@@ -437,15 +455,16 @@ body {
 }
 
 .move-row td {
-  padding: 4px 8px;
-  font-size: 13px;
+  padding: 5px 8px;
+  font-size: 14px;
   vertical-align: middle;
 }
 
 .move-num {
   color: var(--roast);
-  font-size: 12px;
-  width: 36px;
+  font-size: 13px;
+  width: 42px;
+  padding-left: 12px !important;
   font-variant-numeric: tabular-nums;
 }
 
@@ -453,10 +472,11 @@ body {
   cursor: pointer;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 3px 7px;
+  gap: 7px;
+  padding: 3px 8px;
   border-radius: 2px;
   border: 1px solid transparent;
+  color: var(--espresso);
 }
 
 .move-cell:hover {
@@ -471,16 +491,16 @@ body {
 
 .move-clocks-col {
   text-align: right;
-  font-size: 10px;
+  font-size: 12px;
   color: var(--roast);
   font-variant-numeric: tabular-nums;
   line-height: 1.35;
-  width: 64px;
+  padding-right: 12px !important;
 }
 
 .clf-dot {
-  width: 7px;
-  height: 7px;
+  width: 8px;
+  height: 8px;
   display: inline-block;
   flex-shrink: 0;
   border: 1px solid var(--espresso);
@@ -508,14 +528,14 @@ body {
 
 /* Info / Opening Cards */
 .field-label {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--roast);
   letter-spacing: 0.06em;
 }
 
 .pgn-textarea {
   font-family: var(--font);
-  font-size: 12px;
+  font-size: 13px;
   color: var(--espresso);
   background: var(--canvas);
   border: 1px solid var(--espresso);
@@ -557,12 +577,12 @@ body {
 }
 
 .info-key {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--roast);
 }
 
 .info-val {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--espresso);
 }
 
@@ -589,16 +609,16 @@ body {
 }
 
 .game-card-players {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--espresso);
 }
 
 .game-card-meta {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--roast);
   margin-top: 4px;
   display: flex;
-  gap: 10px;
+  gap: 12px;
 }
 
 .result-win {
@@ -613,7 +633,7 @@ body {
   color: var(--roast);
 }
 
-/* Sidebar Footer (Quality Strip + CTA + Nav Buttons) */
+/* Sidebar Footer (2x2 Quality Grid + CTA + Nav Buttons) */
 .sidebar-footer {
   border-top: 2px solid var(--espresso);
   padding: 10px 12px;
@@ -625,17 +645,18 @@ body {
 }
 
 .quality-summary {
-  display: flex;
-  justify-content: space-between;
-  font-size: 11px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 12px;
+  font-size: 13px;
   color: var(--espresso);
-  padding: 2px 2px;
+  padding: 2px 4px;
 }
 
 .quality-summary span {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
 }
 
 .nav-controls {
@@ -666,16 +687,16 @@ body {
 
 .empty-state {
   padding: 24px 14px;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--roast);
   line-height: 1.7;
   text-align: center;
 }
 
 .status-msg {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--roast);
-  min-height: 16px;
+  min-height: 18px;
 }
 
 .status-msg.error {

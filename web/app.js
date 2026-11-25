@@ -1,40 +1,40 @@
 /* ============================================================
-   Blunderless — app.js
-   - Custom 4-color SVG piece set (#FFF8F0 / #4B2E2B / #C08552)
-   - Creamy / thocky mechanical keyboard Web Audio sound engine
-   - Chess.com-style layout bindings (clocks, ratings, quality counts)
+   Blunderless — app.js (v4)
+   - Clean 4-color SVG piece set (no outer glow highlights)
+   - Pure impulse-acoustic mechanical keyboard clack (no oscillators)
+   - High-legibility sidebar & clock bindings
    ============================================================ */
 
 'use strict';
 
-// ── Custom 4-Color Coffee SVG Piece Set ─────────────────────
+// ── Clean 4-Color Coffee SVG Piece Set (No Outer Highlights) ──
 const PIECE_SVGS = (() => {
   const W_FILL = '#FFF8F0';
   const W_STRK = '#4B2E2B';
   const B_FILL = '#4B2E2B';
-  const B_DET = '#C08552';
+  const B_LINE = '#FFF8F0';
 
   const makeSvg = (inner) =>
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 45 45">${inner}</svg>`;
 
   const pieces = {
-    wP: makeSvg(`<path d="M22.5 9c-2.21 0-4 1.79-4 4 0 .89.29 1.71.78 2.38C17.33 16.5 16 18.59 16 21c0 2.03.94 3.84 2.41 5.03-3 1.06-7.41 5.55-7.41 13.47h23c0-7.92-4.41-12.41-7.41-13.47 1.47-1.19 2.41-3 2.41-5.03 0-2.41-1.33-4.5-3.28-5.62.49-.67.78-1.49.78-2.38 0-2.21-1.79-4-4-4z" fill="${W_FILL}" stroke="${W_STRK}" stroke-width="2" stroke-linecap="round"/>`),
-    bP: makeSvg(`<path d="M22.5 9c-2.21 0-4 1.79-4 4 0 .89.29 1.71.78 2.38C17.33 16.5 16 18.59 16 21c0 2.03.94 3.84 2.41 5.03-3 1.06-7.41 5.55-7.41 13.47h23c0-7.92-4.41-12.41-7.41-13.47 1.47-1.19 2.41-3 2.41-5.03 0-2.41-1.33-4.5-3.28-5.62.49-.67.78-1.49.78-2.38 0-2.21-1.79-4-4-4z" fill="${B_FILL}" stroke="${B_DET}" stroke-width="1.6" stroke-linecap="round"/>`),
+    wP: makeSvg(`<path d="M22.5 9c-2.21 0-4 1.79-4 4 0 .89.29 1.71.78 2.38C17.33 16.5 16 18.59 16 21c0 2.03.94 3.84 2.41 5.03-3 1.06-7.41 5.55-7.41 13.47h23c0-7.92-4.41-12.41-7.41-13.47 1.47-1.19 2.41-3 2.41-5.03 0-2.41-1.33-4.5-3.28-5.62.49-.67.78-1.49.78-2.38 0-2.21-1.79-4-4-4z" fill="${W_FILL}" stroke="${W_STRK}" stroke-width="2.1" stroke-linecap="round"/>`),
+    bP: makeSvg(`<path d="M22.5 9c-2.21 0-4 1.79-4 4 0 .89.29 1.71.78 2.38C17.33 16.5 16 18.59 16 21c0 2.03.94 3.84 2.41 5.03-3 1.06-7.41 5.55-7.41 13.47h23c0-7.92-4.41-12.41-7.41-13.47 1.47-1.19 2.41-3 2.41-5.03 0-2.41-1.33-4.5-3.28-5.62.49-.67.78-1.49.78-2.38 0-2.21-1.79-4-4-4z" fill="${B_FILL}" stroke="${B_FILL}" stroke-width="1"/>`),
 
-    wR: makeSvg(`<g fill="${W_FILL}" stroke="${W_STRK}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 39h27v-3H9v3zM12 36v-4h21v4H12zM11 14V9h4v2h5V9h5v2h5V9h4v5"/><path d="M34 14l-3 3H14l-3-3"/><path d="M31 17v12.5H14V17"/><path d="M31 29.5l1.5 2.5h-20l1.5-2.5"/><path d="M11 14h23" fill="none"/></g>`),
-    bR: makeSvg(`<g fill="${B_FILL}" stroke="${B_DET}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 39h27v-3H9v3zM12.5 32l1.5-2.5h17l1.5 2.5h-20zM12 36v-4h21v4H12z"/><path d="M14 29.5v-13h17v13H14z"/><path d="M14 16.5L11 14h23l-3 2.5H14zM11 14V9h4v2h5V9h5v2h5V9h4v5H11z"/></g>`),
+    wR: makeSvg(`<g fill="${W_FILL}" stroke="${W_STRK}" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M9 39h27v-3H9v3zM12 36v-4h21v4H12zM11 14V9h4v2h5V9h5v2h5V9h4v5"/><path d="M34 14l-3 3H14l-3-3"/><path d="M31 17v12.5H14V17"/><path d="M31 29.5l1.5 2.5h-20l1.5-2.5"/><path d="M11 14h23" fill="none"/></g>`),
+    bR: makeSvg(`<g fill="${B_FILL}" stroke="${B_FILL}" stroke-width="1" stroke-linejoin="round"><path d="M9 39h27v-3H9v3zM12.5 32l1.5-2.5h17l1.5 2.5h-20zM12 36v-4h21v4H12z"/><path d="M14 29.5v-13h17v13H14z"/><path d="M14 16.5L11 14h23l-3 2.5H14zM11 14V9h4v2h5V9h5v2h5V9h4v5H11z"/><path d="M12 35.5h21M13 31.5h19M14 29.5h17M14 16.5h17M11 14h23" fill="none" stroke="${B_LINE}" stroke-width="1.2"/></g>`),
 
-    wN: makeSvg(`<g fill="${W_FILL}" stroke="${W_STRK}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10c10.5 1 16.5 8 16 29H15c0-9 10-6.5 8-21"/><path d="M24 18c.38 2.91-5.55 7.37-8 9-3 2-2.82 4.34-5 4-1.042-.94 1.41-3.04 0-3-1 0 .19 1.23-1 2-1 0-4.003 1-4-4 0-2 6-12 6-12s1.89-1.9 2-3.5c-.73-.994-.5-2-.5-3 1-1 3 2.5 3 2.5h2s.78-1.992 2.5-3c1 0 1 3 1 3"/><circle cx="15" cy="14.5" r="1" fill="${W_STRK}"/></g>`),
-    bN: makeSvg(`<g fill="${B_FILL}" stroke="${B_DET}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10c10.5 1 16.5 8 16 29H15c0-9 10-6.5 8-21"/><path d="M24 18c.38 2.91-5.55 7.37-8 9-3 2-2.82 4.34-5 4-1.042-.94 1.41-3.04 0-3-1 0 .19 1.23-1 2-1 0-4.003 1-4-4 0-2 6-12 6-12s1.89-1.9 2-3.5c-.73-.994-.5-2-.5-3 1-1 3 2.5 3 2.5h2s.78-1.992 2.5-3c1 0 1 3 1 3"/><circle cx="15" cy="14.5" r="1.2" fill="${B_DET}" stroke="none"/></g>`),
+    wN: makeSvg(`<g fill="${W_FILL}" stroke="${W_STRK}" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10c10.5 1 16.5 8 16 29H15c0-9 10-6.5 8-21"/><path d="M24 18c.38 2.91-5.55 7.37-8 9-3 2-2.82 4.34-5 4-1.042-.94 1.41-3.04 0-3-1 0 .19 1.23-1 2-1 0-4.003 1-4-4 0-2 6-12 6-12s1.89-1.9 2-3.5c-.73-.994-.5-2-.5-3 1-1 3 2.5 3 2.5h2s.78-1.992 2.5-3c1 0 1 3 1 3"/><circle cx="15" cy="14.5" r="1.1" fill="${W_STRK}" stroke="none"/></g>`),
+    bN: makeSvg(`<g fill="${B_FILL}" stroke="${B_FILL}" stroke-width="1" stroke-linejoin="round"><path d="M22 10c10.5 1 16.5 8 16 29H15c0-9 10-6.5 8-21"/><path d="M24 18c.38 2.91-5.55 7.37-8 9-3 2-2.82 4.34-5 4-1.042-.94 1.41-3.04 0-3-1 0 .19 1.23-1 2-1 0-4.003 1-4-4 0-2 6-12 6-12s1.89-1.9 2-3.5c-.73-.994-.5-2-.5-3 1-1 3 2.5 3 2.5h2s.78-1.992 2.5-3c1 0 1 3 1 3"/><circle cx="15" cy="14.5" r="1.2" fill="${B_LINE}" stroke="none"/></g>`),
 
-    wB: makeSvg(`<g fill="${W_FILL}" stroke="${W_STRK}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 36c3.39-.97 10.11.43 13.5-2 3.39 2.43 10.11 1.03 13.5 2 0 0 1.65.54 3 2-.68.97-1.65.99-3 .5-3.39-.97-10.11.46-13.5-1-3.39 1.46-10.11.03-13.5 1-1.354.49-2.323.47-3-.5 1.354-1.94 3-2 3-2z"/><path d="M15 32c2.5 2.5 12.5 2.5 15 0 .5-1.5 0-2 0-2 0-2.5-2.5-4-2.5-4 5.5-1.5 6-11.5-5-15.5-11 4-10.5 14-5 15.5 0 0-2.5 1.5-2.5 4 0 0-.5.5 0 2z"/><circle cx="22.5" cy="8" r="2.5"/><path d="M17.5 26h10M15 30h15M22.5 15.5v5M20 18h5" fill="none"/></g>`),
-    bB: makeSvg(`<g fill="${B_FILL}" stroke="${B_DET}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 36c3.39-.97 10.11.43 13.5-2 3.39 2.43 10.11 1.03 13.5 2 0 0 1.65.54 3 2-.68.97-1.65.99-3 .5-3.39-.97-10.11.46-13.5-1-3.39 1.46-10.11.03-13.5 1-1.354.49-2.323.47-3-.5 1.354-1.94 3-2 3-2z"/><path d="M15 32c2.5 2.5 12.5 2.5 15 0 .5-1.5 0-2 0-2 0-2.5-2.5-4-2.5-4 5.5-1.5 6-11.5-5-15.5-11 4-10.5 14-5 15.5 0 0-2.5 1.5-2.5 4 0 0-.5.5 0 2z"/><circle cx="22.5" cy="8" r="2.5"/><path d="M17.5 26h10M15 30h15M22.5 15.5v5M20 18h5" fill="none"/></g>`),
+    wB: makeSvg(`<g fill="${W_FILL}" stroke="${W_STRK}" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M9 36c3.39-.97 10.11.43 13.5-2 3.39 2.43 10.11 1.03 13.5 2 0 0 1.65.54 3 2-.68.97-1.65.99-3 .5-3.39-.97-10.11.46-13.5-1-3.39 1.46-10.11.03-13.5 1-1.354.49-2.323.47-3-.5 1.354-1.94 3-2 3-2z"/><path d="M15 32c2.5 2.5 12.5 2.5 15 0 .5-1.5 0-2 0-2 0-2.5-2.5-4-2.5-4 5.5-1.5 6-11.5-5-15.5-11 4-10.5 14-5 15.5 0 0-2.5 1.5-2.5 4 0 0-.5.5 0 2z"/><circle cx="22.5" cy="8" r="2.5"/><path d="M17.5 26h10M15 30h15M22.5 15.5v5M20 18h5" fill="none"/></g>`),
+    bB: makeSvg(`<g fill="${B_FILL}" stroke="${B_FILL}" stroke-width="1" stroke-linejoin="round"><path d="M9 36c3.39-.97 10.11.43 13.5-2 3.39 2.43 10.11 1.03 13.5 2 0 0 1.65.54 3 2-.68.97-1.65.99-3 .5-3.39-.97-10.11.46-13.5-1-3.39 1.46-10.11.03-13.5 1-1.354.49-2.323.47-3-.5 1.354-1.94 3-2 3-2z"/><path d="M15 32c2.5 2.5 12.5 2.5 15 0 .5-1.5 0-2 0-2 0-2.5-2.5-4-2.5-4 5.5-1.5 6-11.5-5-15.5-11 4-10.5 14-5 15.5 0 0-2.5 1.5-2.5 4 0 0-.5.5 0 2z"/><circle cx="22.5" cy="8" r="2.5"/><path d="M17.5 26h10M15 30h15M22.5 15.5v5M20 18h5" fill="none" stroke="${B_LINE}" stroke-width="1.4" stroke-linecap="round"/></g>`),
 
-    wQ: makeSvg(`<g fill="${W_FILL}" stroke="${W_STRK}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="12" r="2.2"/><circle cx="14" cy="9" r="2.2"/><circle cx="22.5" cy="8" r="2.2"/><circle cx="31" cy="9" r="2.2"/><circle cx="39" cy="12" r="2.2"/><path d="M9 26c8.5-1.5 21-1.5 27 0l2-12-7 11V11l-5.5 13.5-3-15-3 15-5.5-14V25L7 14l2 12z"/><path d="M9 26c0 2 1.5 2 2.5 4 1 1.5 1 1 .5 3.5-1.5 1-1.5 2.5-1.5 2.5-1.5 1.5.5 2.5.5 2.5 6.5 1 16.5 1 23 0 0 0 1.5-1 0-2.5 0 0 .5-1.5-1-2.5-.5-2.5-.5-2 .5-3.5 1-2 2.5-2 2.5-4-8.5-1.5-18.5-1.5-27 0z"/><path d="M11.5 30c3.5-1 18.5-1 22 0M12 33.5c6-1 15-1 21 0" fill="none"/></g>`),
-    bQ: makeSvg(`<g fill="${B_FILL}" stroke="${B_DET}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="12" r="2.2"/><circle cx="14" cy="9" r="2.2"/><circle cx="22.5" cy="8" r="2.2"/><circle cx="31" cy="9" r="2.2"/><circle cx="39" cy="12" r="2.2"/><path d="M9 26c8.5-1.5 21-1.5 27 0l2.5-12.5L31 25l-.3-14.1-5.2 13.6-3-14.5-3 14.5-5.2-13.6L14 25 6.5 13.5 9 26z"/><path d="M9 26c0 2 1.5 2 2.5 4 1 1.5 1 1 .5 3.5-1.5 1-1.5 2.5-1.5 2.5-1.5 1.5.5 2.5.5 2.5 6.5 1 16.5 1 23 0 0 0 1.5-1 0-2.5 0 0 .5-1.5-1-2.5-.5-2.5-.5-2 .5-3.5 1-2 2.5-2 2.5-4-8.5-1.5-18.5-1.5-27 0z"/><path d="M11.5 30c3.5-1 18.5-1 22 0M12 33.5c6-1 15-1 21 0" fill="none"/></g>`),
+    wQ: makeSvg(`<g fill="${W_FILL}" stroke="${W_STRK}" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="12" r="2.2"/><circle cx="14" cy="9" r="2.2"/><circle cx="22.5" cy="8" r="2.2"/><circle cx="31" cy="9" r="2.2"/><circle cx="39" cy="12" r="2.2"/><path d="M9 26c8.5-1.5 21-1.5 27 0l2-12-7 11V11l-5.5 13.5-3-15-3 15-5.5-14V25L7 14l2 12z"/><path d="M9 26c0 2 1.5 2 2.5 4 1 1.5 1 1 .5 3.5-1.5 1-1.5 2.5-1.5 2.5-1.5 1.5.5 2.5.5 2.5 6.5 1 16.5 1 23 0 0 0 1.5-1 0-2.5 0 0 .5-1.5-1-2.5-.5-2.5-.5-2 .5-3.5 1-2 2.5-2 2.5-4-8.5-1.5-18.5-1.5-27 0z"/><path d="M11.5 30c3.5-1 18.5-1 22 0M12 33.5c6-1 15-1 21 0" fill="none"/></g>`),
+    bQ: makeSvg(`<g fill="${B_FILL}" stroke="${B_FILL}" stroke-width="1" stroke-linejoin="round"><circle cx="6" cy="12" r="2.2"/><circle cx="14" cy="9" r="2.2"/><circle cx="22.5" cy="8" r="2.2"/><circle cx="31" cy="9" r="2.2"/><circle cx="39" cy="12" r="2.2"/><path d="M9 26c8.5-1.5 21-1.5 27 0l2.5-12.5L31 25l-.3-14.1-5.2 13.6-3-14.5-3 14.5-5.2-13.6L14 25 6.5 13.5 9 26z"/><path d="M9 26c0 2 1.5 2 2.5 4 1 1.5 1 1 .5 3.5-1.5 1-1.5 2.5-1.5 2.5-1.5 1.5.5 2.5.5 2.5 6.5 1 16.5 1 23 0 0 0 1.5-1 0-2.5 0 0 .5-1.5-1-2.5-.5-2.5-.5-2 .5-3.5 1-2 2.5-2 2.5-4-8.5-1.5-18.5-1.5-27 0z"/><path d="M11.5 30c3.5-1 18.5-1 22 0M12 33.5c6-1 15-1 21 0" fill="none" stroke="${B_LINE}" stroke-width="1.3" stroke-linecap="round"/></g>`),
 
-    wK: makeSvg(`<g fill="${W_FILL}" stroke="${W_STRK}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22.5 11.63V6M20 8h5" fill="none"/><path d="M22.5 25s4.5-7.5 3-10.5c0 0-1-2.5-3-2.5s-3 2.5-3 2.5c-1.5 3 3 10.5 3 10.5"/><path d="M11.5 37c5.5 3.5 15.5 3.5 21 0v-7s9-4.5 6-10.5c-4-6.5-13.5-3.5-16 4V27v-3.5c-3.5-7.5-13-10.5-16-4-3 6 5 10 5 10V37z"/><path d="M11.5 30c5.5-3 15.5-3 21 0m-21 3.5c5.5-3 15.5-3 21 0m-21 3.5c5.5-3 15.5-3 21 0" fill="none"/></g>`),
-    bK: makeSvg(`<g fill="${B_FILL}" stroke="${B_DET}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M22.5 11.63V6M20 8h5" fill="none"/><path d="M22.5 25s4.5-7.5 3-10.5c0 0-1-2.5-3-2.5s-3 2.5-3 2.5c-1.5 3 3 10.5 3 10.5"/><path d="M11.5 37c5.5 3.5 15.5 3.5 21 0v-7s9-4.5 6-10.5c-4-6.5-13.5-3.5-16 4V27v-3.5c-3.5-7.5-13-10.5-16-4-3 6 5 10 5 10V37z"/><path d="M11.5 30c5.5-3 15.5-3 21 0m-21 3.5c5.5-3 15.5-3 21 0m-21 3.5c5.5-3 15.5-3 21 0" fill="none"/></g>`),
+    wK: makeSvg(`<g fill="${W_FILL}" stroke="${W_STRK}" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M22.5 11.63V6M20 8h5" fill="none"/><path d="M22.5 25s4.5-7.5 3-10.5c0 0-1-2.5-3-2.5s-3 2.5-3 2.5c-1.5 3 3 10.5 3 10.5"/><path d="M11.5 37c5.5 3.5 15.5 3.5 21 0v-7s9-4.5 6-10.5c-4-6.5-13.5-3.5-16 4V27v-3.5c-3.5-7.5-13-10.5-16-4-3 6 5 10 5 10V37z"/><path d="M11.5 30c5.5-3 15.5-3 21 0m-21 3.5c5.5-3 15.5-3 21 0m-21 3.5c5.5-3 15.5-3 21 0" fill="none"/></g>`),
+    bK: makeSvg(`<g fill="${B_FILL}" stroke="${B_FILL}" stroke-width="1" stroke-linejoin="round"><path d="M22.5 11.63V6M20 8h5" fill="none" stroke="${B_FILL}" stroke-width="2.2" stroke-linecap="round"/><path d="M22.5 25s4.5-7.5 3-10.5c0 0-1-2.5-3-2.5s-3 2.5-3 2.5c-1.5 3 3 10.5 3 10.5"/><path d="M11.5 37c5.5 3.5 15.5 3.5 21 0v-7s9-4.5 6-10.5c-4-6.5-13.5-3.5-16 4V27v-3.5c-3.5-7.5-13-10.5-16-4-3 6 5 10 5 10V37z"/><path d="M11.5 30c5.5-3 15.5-3 21 0m-21 3.5c5.5-3 15.5-3 21 0m-21 3.5c5.5-3 15.5-3 21 0" fill="none" stroke="${B_LINE}" stroke-width="1.3" stroke-linecap="round"/></g>`),
   };
 
   const uris = {};
@@ -44,12 +44,13 @@ const PIECE_SVGS = (() => {
   return uris;
 })();
 
-// ── Creamy Mechanical Keyboard Sound System ─────────────────
+// ── Pure Acoustic Mechanical Keyboard Clack Engine ───────────
 /**
- * Synthesises lubed linear / tactile mechanical switch "thocks"
- * using Web Audio API:
- *  1. Low-pass filtered housing body resonance (triangle pitch sweep)
- *  2. Soft damped POM/PBT stem bottom-out pop (bandpass noise)
+ * Zero oscillator tones (no 8-bit video game sweeps).
+ * Synthesises real physical keycap/piece impact acoustics using two
+ * ultra-short filtered noise transients:
+ *   Layer A (Clack): 4.5ms high-mid PBT stem impact (1400-1900 Hz)
+ *   Layer B (Body):  16ms deep low-mid plate/board resonance (280-420 Hz)
  */
 class SoundSystem {
   constructor() { this._ctx = null; }
@@ -62,115 +63,75 @@ class SoundSystem {
     return this._ctx;
   }
 
-  /**
-   * Single creamy keystroke thock.
-   * @param {number} baseFreq   Starting housing pitch in Hz (150-230 = creamy)
-   * @param {number} endFreq    Resting bottom-out pitch in Hz (45-80)
-   * @param {number} stemFreq   Filtered tactile pop center in Hz (380-620)
-   * @param {number} gainLevel  Master gain (0.0 - 1.0)
-   * @param {number} dur        Decay duration in seconds
-   */
-  _thock(baseFreq = 195, endFreq = 65, stemFreq = 460, gainLevel = 0.55, dur = 0.065) {
-    const ctx = this._ctx_get();
-    const now = ctx.currentTime;
-    // Slight organic pitch variance (+/- 4%) like typing across keys
-    const jitter = 0.96 + Math.random() * 0.08;
-
-    // 1. Warm housing thump (low-passed triangle wave)
-    const osc = ctx.createOscillator();
-    osc.type = 'triangle';
-    osc.frequency.setValueAtTime(baseFreq * jitter, now);
-    osc.frequency.exponentialRampToValueAtTime(endFreq * jitter, now + dur);
-
-    const bodyLp = ctx.createBiquadFilter();
-    bodyLp.type = 'lowpass';
-    bodyLp.frequency.setValueAtTime(420, now);
-
-    const bodyGain = ctx.createGain();
-    bodyGain.gain.setValueAtTime(gainLevel, now);
-    bodyGain.gain.exponentialRampToValueAtTime(0.001, now + dur + 0.015);
-
-    osc.connect(bodyLp);
-    bodyLp.connect(bodyGain);
-    bodyGain.connect(ctx.destination);
-    osc.start(now);
-    osc.stop(now + dur + 0.02);
-
-    // 2. Muffled tactile stem pop (short warm bandpass impulse)
-    const popDur = 0.022;
-    const bufSize = Math.floor(ctx.sampleRate * popDur);
+  _noiseBurst(ctx, startTime, duration, freq, q, filterType, gainVal, decayPower = 4.0) {
+    const bufSize = Math.max(1, Math.floor(ctx.sampleRate * duration));
     const buffer = ctx.createBuffer(1, bufSize, ctx.sampleRate);
     const data = buffer.getChannelData(0);
+
     for (let i = 0; i < bufSize; i++) {
-      data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufSize, 3.2);
+      const env = Math.pow(1 - i / bufSize, decayPower);
+      data[i] = (Math.random() * 2 - 1) * env;
     }
 
-    const noise = ctx.createBufferSource();
-    noise.buffer = buffer;
+    const src = ctx.createBufferSource();
+    src.buffer = buffer;
 
-    const stemBp = ctx.createBiquadFilter();
-    stemBp.type = 'bandpass';
-    stemBp.frequency.setValueAtTime(stemFreq * jitter, now);
-    stemBp.Q.setValueAtTime(2.4, now);
+    const filter = ctx.createBiquadFilter();
+    filter.type = filterType;
+    filter.frequency.setValueAtTime(freq, startTime);
+    filter.Q.setValueAtTime(q, startTime);
 
-    const popGain = ctx.createGain();
-    popGain.gain.setValueAtTime(gainLevel * 0.42, now);
-    popGain.gain.exponentialRampToValueAtTime(0.001, now + popDur);
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(gainVal, startTime);
+    gain.gain.exponentialRampToValueAtTime(0.0008, startTime + duration);
 
-    noise.connect(stemBp);
-    stemBp.connect(popGain);
-    popGain.connect(ctx.destination);
-    noise.start(now);
-    noise.stop(now + popDur + 0.005);
+    src.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+    src.start(startTime);
+    src.stop(startTime + duration + 0.005);
   }
 
-  /** Standard move: single smooth creamy keystroke */
-  move() {
-    this._thock(195, 66, 460, 0.55, 0.062);
-  }
-
-  /** Capture: crisp keycap pop followed by deep bottom-out thock */
-  capture() {
-    this._thock(240, 95, 580, 0.42, 0.042);
-    setTimeout(() => this._thock(160, 50, 390, 0.68, 0.078), 34);
-  }
-
-  /** Castling: two-finger key roll */
-  castle() {
-    this._thock(210, 72, 490, 0.50, 0.055);
-    setTimeout(() => this._thock(180, 60, 430, 0.55, 0.065), 68);
-  }
-
-  /** Check: muted warm keycap chime + thock */
-  check() {
+  /**
+   * Single mechanical keycap clack (stem clack + board body thud).
+   */
+  _clack(clackHz = 1650, bodyHz = 340, vol = 0.75) {
     const ctx = this._ctx_get();
     const now = ctx.currentTime;
-    const osc = ctx.createOscillator();
-    const lp = ctx.createBiquadFilter();
-    const g = ctx.createGain();
+    const jitter = 0.94 + Math.random() * 0.12;
 
-    osc.type = 'triangle';
-    osc.frequency.setValueAtTime(587.33, now); // D5
-    osc.frequency.exponentialRampToValueAtTime(440, now + 0.14); // A4
-
-    lp.type = 'lowpass';
-    lp.frequency.setValueAtTime(950, now);
-
-    g.gain.setValueAtTime(0.22, now);
-    g.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
-
-    osc.connect(lp);
-    lp.connect(g);
-    g.connect(ctx.destination);
-    osc.start(now);
-    osc.stop(now + 0.17);
-
-    this._thock(205, 68, 480, 0.5, 0.06);
+    // 1. Crisp 5ms keycap stem clack
+    this._noiseBurst(ctx, now, 0.006, clackHz * jitter, 2.2, 'bandpass', vol * 0.85, 3.5);
+    // 2. Warm 18ms board / housing resonance
+    this._noiseBurst(ctx, now + 0.001, 0.018, bodyHz * jitter, 1.8, 'bandpass', vol * 1.15, 3.0);
   }
 
-  /** Game end: deep spacebar bottom-out thock */
+  /** Standard move: single tactile PBT clack */
+  move() {
+    this._clack(1680, 350, 0.72);
+  }
+
+  /** Capture: sharp initial top-out snap + heavier bottom-out clack */
+  capture() {
+    this._clack(2100, 440, 0.55);
+    setTimeout(() => this._clack(1420, 270, 0.92), 28);
+  }
+
+  /** Castling: fast two-key roll */
+  castle() {
+    this._clack(1780, 370, 0.65);
+    setTimeout(() => this._clack(1560, 320, 0.72), 62);
+  }
+
+  /** Check: crisp double-tap clack on a brighter key */
+  check() {
+    this._clack(2250, 480, 0.75);
+    setTimeout(() => this._clack(2450, 520, 0.65), 55);
+  }
+
+  /** Game end: deep spacebar stabilizer clack */
   gameEnd() {
-    this._thock(135, 42, 320, 0.78, 0.13);
+    this._clack(1150, 220, 1.0);
   }
 }
 
@@ -315,7 +276,7 @@ function initBoard() {
 
   const resize = () => {
     const stage = document.querySelector('.left-stage');
-    const availH = stage.clientHeight - 124;
+    const availH = stage.clientHeight - 128;
     const availW = stage.clientWidth - 84;
     const size = Math.max(280, Math.min(availH, availW, 640));
 
@@ -439,7 +400,6 @@ function renderMoveList(movesData) {
     tr.appendChild(makeMoveTd(wm));
     tr.appendChild(makeMoveTd(bm));
 
-    // Stacked right-hand clock column matching Chess.com screenshot
     const tdClks = document.createElement('td');
     tdClks.className = 'move-clocks-col';
     const wClk = wm?.clock || '';
