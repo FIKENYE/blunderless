@@ -13,7 +13,7 @@
   <!-- chess.js: board logic (move validation, FEN, PGN parsing) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
 
-  <!-- Chessboard.js: interactive board rendering via CDN -->
+  <!-- Chessboard.js: interactive board rendering -->
   <link rel="stylesheet"
         href="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css" />
   <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
@@ -32,48 +32,52 @@
   </header>
 
   <main class="workspace">
-    <!-- ── LEFT: Eval Bar ── -->
-    <aside class="eval-panel">
-      <div class="eval-bar-wrap">
-        <div class="eval-bar-track">
-          <div id="eval-black-fill" class="eval-fill eval-fill-black"></div>
-          <div id="eval-white-fill" class="eval-fill eval-fill-white" style="height:50%"></div>
+
+    <!-- ══ Board section: eval bar flush-left of board ══ -->
+    <section class="board-section">
+
+      <!-- Eval Bar (immediately left of board) -->
+      <aside class="eval-panel">
+        <div class="eval-label" id="eval-label-top">0.0</div>
+        <div class="eval-bar-wrap">
+          <div class="eval-bar-track">
+            <div id="eval-black-fill" class="eval-fill eval-fill-black" style="height:50%"></div>
+            <div id="eval-white-fill" class="eval-fill eval-fill-white" style="height:50%"></div>
+          </div>
         </div>
-        <div id="eval-label-top" class="eval-label eval-label-top">0.0</div>
-        <div id="eval-label-bot" class="eval-label eval-label-bot">0.0</div>
-      </div>
-    </aside>
+        <div class="eval-label" id="eval-label-bot">0.0</div>
+      </aside>
 
-    <!-- ── CENTRE: Board + controls ── -->
-    <section class="board-panel">
-      <div class="board-header">
-        <span id="player-black" class="player-tag">Black</span>
-      </div>
+      <!-- Board + controls + input -->
+      <div class="board-content">
+        <div class="board-header">
+          <span id="player-black" class="player-tag">Black</span>
+        </div>
 
-      <div id="board" class="chess-board"></div>
+        <div id="board" class="chess-board"></div>
 
-      <div class="board-header">
-        <span id="player-white" class="player-tag">White</span>
-      </div>
+        <div class="board-header">
+          <span id="player-white" class="player-tag">White</span>
+        </div>
 
-      <div class="nav-controls">
-        <button id="btn-start"  class="nav-btn" title="Go to start">⏮</button>
-        <button id="btn-prev"   class="nav-btn" title="Previous move">◀</button>
-        <button id="btn-next"   class="nav-btn" title="Next move">▶</button>
-        <button id="btn-end"    class="nav-btn" title="Go to end">⏭</button>
-        <button id="btn-flip"   class="nav-btn" title="Flip board">⇅</button>
-      </div>
+        <div class="nav-controls">
+          <button id="btn-start" class="nav-btn" title="Go to start (Home)">⏮</button>
+          <button id="btn-prev"  class="nav-btn" title="Previous move (←)">◀</button>
+          <button id="btn-next"  class="nav-btn" title="Next move (→)">▶</button>
+          <button id="btn-end"   class="nav-btn" title="Go to end (End)">⏭</button>
+          <button id="btn-flip"  class="nav-btn" title="Flip board (f)">⇅</button>
+        </div>
 
-      <!-- PGN / FEN input -->
-      <div class="input-panel">
-        <textarea id="pgn-input" class="pgn-textarea"
-                  placeholder="Paste a PGN or FEN here…" rows="4"></textarea>
-        <button id="analyse-btn" class="btn btn-primary">analyse</button>
-        <div id="status-msg" class="status-msg"></div>
+        <div class="input-panel">
+          <textarea id="pgn-input" class="pgn-textarea"
+                    placeholder="Paste a PGN or FEN here… (Ctrl+Enter to analyse)" rows="4"></textarea>
+          <button id="analyse-btn" class="btn btn-primary">analyse</button>
+          <div id="status-msg" class="status-msg"></div>
+        </div>
       </div>
     </section>
 
-    <!-- ── RIGHT: Move list + games list ── -->
+    <!-- ══ Right side panel: move list + chess.com games ══ -->
     <aside class="side-panel">
       <div class="panel-tabs">
         <button class="tab-btn active" data-tab="moves">moves</button>
@@ -101,7 +105,7 @@
       <!-- Chess.com recent games -->
       <div id="tab-games" class="tab-content hidden">
         <div id="games-list" class="games-list">
-          <div class="empty-state">Enter a Chess.com username to load games.</div>
+          <div class="empty-state">Enter a Chess.com username<br/>above to load games.</div>
         </div>
       </div>
     </aside>

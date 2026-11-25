@@ -1,175 +1,335 @@
 /* ============================================================
-   Blunderless — app.js
-   Single-page chess analysis frontend.
-   Talks to the FastAPI backend (/api/*) for all engine work.
+   Blunderless — app.js  v2
+   Piece-movement animations via chessboard.js moveSpeed.
+   Wood-thud sounds synthesised with Web Audio API (no files).
    ============================================================ */
 
 'use strict';
 
+// ── Sound system ────────────────────────────────────────────
+/**
+ * Generates chess sounds programmatically using the Web Audio API.
+ * No audio files needed. All sounds are wood-like noise transients.
+ */
+class SoundSystem {
+  constructor() {
+    this._ctx = null;
+  }
+
+  _ctx_get() {
+    if (!this._ctx) {
+      this._ctx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    // Resume on first user gesture (browser autoplay policy).
+    if (this._ctx.state === 'suspended') this._ctx.resume();
+    return this._ctx;
+  }
+
+  /**
+   * Wood transient: shaped white noise with exponential decay.
+   * pitch controls how 'thuddy' (low) vs 'clicky' (high) the sound is.
+   */
+  _wood(pitch = 1.0, vol = 0.6, dur = 0.09) {
+    const ctx      = this._ctx_get();
+    const bufSize  = Math.floor(ctx.sampleRate * dur);
+    const buffer   = ctx.createBuffer(1, bufSize, ctx.sampleRate);
+    const data     = buffer.getChannelData(0);
+
+    for (let i = 0; i < bufSize; i++) {
+      // Noise shaped with exponential decay and pitch-controlled filter via
+      // a simple IIR-like smoothing (higher pitch = less smoothing = clickier).
+      data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufSize, 2 + pitch * 3);
+    }
+
+    const src  = ctx.createBufferSource();
+    src.buffer = buffer;
+
+    // Band-pass-like effect: a biquad filter tuned to 'wood' frequency range.
+    const filter      = ctx.createBiquadFilter();
+    filter.type       = 'bandpass';
+    filter.frequency.value = 300 + pitch * 1200;
+    filter.Q.value    = 0.8;
+
+    const gain     = ctx.createGain();
+    gain.gain.setValueAtTime(vol, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur + 0.03);
+
+    src.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+    src.start(ctx.currentTime);
+    src.stop(ctx.currentTime + dur + 0.05);
+  }
+
+  /** Quiet click for a standard piece move. */
+  move() {
+    this._wood(1.6, 0.5, 0.07);
+  }
+
+  /** Louder double-thud for a capture. */
+  capture() {
+    this._wood(0.6, 0.75, 0.10);
+    setTimeout(() => this._wood(0.4, 0.5, 0.09), 40);
+  }
+
+  /** Sharp ring for a check. */
+  check() {
+    const ctx   = this._ctx_get();
+    const osc   = ctx.createOscillator();
+    const gain  = ctx.createGain();
+    osc.type    = 'sine';
+    osc.frequency.setValueAtTime(1050, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(700, ctx.currentTime + 0.25);
+    gain.gain.setValueAtTime(0.28, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.28);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.3);
+    // Add the thud on top.
+    setTimeout(() => this._wood(1.5, 0.45, 0.07), 15);
+  }
+
+  /** Two-part click for castling (rook then king). */
+  castle() {
+    this._wood(1.4, 0.5, 0.07);
+    setTimeout(() => this._wood(1.6, 0.5, 0.07), 130);
+  }
+
+  /** Muted thud for game end. */
+  gameEnd() {
+    this._wood(0.3, 0.9, 0.18);
+  }
+}
+
+const sounds = new SoundSystem();
+
 // ── State ──────────────────────────────────────────────────
 const state = {
-  game:        null,   // current chess.js Game instance
-  moves:       [],     // array of analysed move objects from /api/analyse-pgn
-  plyIndex:    0,      // which position we are viewing (0 = initial)
-  orientation: 'white',
-  board:       null,   // chessboard.js instance
+  game:         null,   // chess.js instance used for board replaying
+  moves:        [],     // array of analysed move objects from /api/analyse-pgn
+  plyIndex:     0,      // 0 = initial position
+  initialFen:   null,
+  initialEval:  null,
+  orientation:  'white',
+  board:        null,   // chessboard.js instance
 };
 
-// ── DOM refs ───────────────────────────────────────────────
+// ── DOM helpers ────────────────────────────────────────────
 const $  = id => document.getElementById(id);
-const evalBlack   = $('eval-black-fill');
-const evalWhite   = $('eval-fill') || null;  // alias set below
-const evalLabelT  = $('eval-label-top');
-const evalLabelB  = $('eval-label-bot');
-const moveTableBody  = $('move-tbody');
-const emptyMoves  = $('empty-moves');
-const gameHeaders = $('game-headers');
-const pgnInput    = $('pgn-input');
-const statusMsg   = $('status-msg');
-const analyseBtn  = $('analyse-btn');
-const playerWhite = $('player-white');
-const playerBlack = $('player-black');
-const gamesList   = $('games-list');
 
-// ── Classification display helpers ─────────────────────────
+const evalBlackFill = $('eval-black-fill');
+const evalWhiteFill = $('eval-white-fill');
+const evalLabelT    = $('eval-label-top');
+const evalLabelB    = $('eval-label-bot');
+const moveTableBody = $('move-tbody');
+const emptyMoves    = $('empty-moves');
+const gameHeaders   = $('game-headers');
+const pgnInput      = $('pgn-input');
+const statusMsg     = $('status-msg');
+const analyseBtn    = $('analyse-btn');
+const playerWhite   = $('player-white');
+const playerBlack   = $('player-black');
+const gamesList     = $('games-list');
+
+// ── Classification meta ─────────────────────────────────────
 const CLF_META = {
-  best:       { label: '★', cls: 'clf-best',       title: 'Best move'   },
-  good:       { label: '✓', cls: 'clf-good',       title: 'Good move'   },
-  inaccuracy: { label: '?!', cls: 'clf-inaccuracy', title: 'Inaccuracy' },
-  mistake:    { label: '?',  cls: 'clf-mistake',    title: 'Mistake'    },
-  blunder:    { label: '??', cls: 'clf-blunder',    title: 'Blunder'    },
+  best:       { cls: 'clf-best',       title: 'Best move'   },
+  good:       { cls: 'clf-good',       title: 'Good move'   },
+  inaccuracy: { cls: 'clf-inaccuracy', title: 'Inaccuracy'  },
+  mistake:    { cls: 'clf-mistake',    title: 'Mistake'     },
+  blunder:    { cls: 'clf-blunder',    title: 'Blunder'     },
 };
 
 function clfDot(clf) {
   const m = CLF_META[clf] || CLF_META.good;
-  return `<span class="clf-dot ${m.cls}" title="${m.title + ': ' + clf}"></span>`;
+  return `<span class="clf-dot ${m.cls}" title="${m.title}"></span>`;
 }
 
 // ── Eval bar ───────────────────────────────────────────────
-/**
- * Update the vertical eval bar.
- * score: { type: "cp"|"mate", value: <number> }  — White-POV from server.
- */
 function setEvalBar(score) {
   let cp;
   if (score.type === 'mate') {
     cp = score.value > 0 ? 10000 : -10000;
     const mv = Math.abs(score.value);
-    const label = score.value > 0 ? `M${mv}` : `-M${mv}`;
-    evalLabelT.textContent = score.value < 0 ? label : '';
-    evalLabelB.textContent = score.value > 0 ? label : '';
+    const lbl = `M${mv}`;
+    if (score.value > 0) {
+      evalLabelT.textContent = '';
+      evalLabelB.textContent = lbl;
+    } else {
+      evalLabelT.textContent = lbl;
+      evalLabelB.textContent = '';
+    }
   } else {
     cp = score.value;
     const disp = (Math.abs(cp) / 100).toFixed(1);
-    const sign  = cp >= 0 ? '+' : '-';
-    evalLabelT.textContent = cp < 0 ? sign + disp : '';
-    evalLabelB.textContent = cp >= 0 ? sign + disp : '';
+    if (cp >= 0) {
+      evalLabelT.textContent = '';
+      evalLabelB.textContent = '+' + disp;
+    } else {
+      evalLabelT.textContent = '-' + disp;
+      evalLabelB.textContent = '';
+    }
   }
 
-  // Map centipawns to a 0-100 percentage with a sigmoid-like clamp.
-  const pct = Math.round(50 + 50 * Math.tanh(cp / 400));
+  // Sigmoid-like map from centipawns to 0–100%.
+  const pct      = Math.round(50 + 50 * Math.tanh(cp / 350));
   const blackPct = 100 - pct;
-
-  $('eval-black-fill').style.height = blackPct + '%';
-  $('eval-white-fill').style.height = pct + '%';
+  evalBlackFill.style.height = blackPct + '%';
+  evalWhiteFill.style.height = pct + '%';
 }
 
-// ── Board ──────────────────────────────────────────────────
+// ── Board initialisation ────────────────────────────────────
 function initBoard() {
-  state.game = new Chess();
   state.board = Chessboard('board', {
     position:    'start',
     orientation: state.orientation,
     pieceTheme:  'https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png',
-    draggable:   false,   // navigation-only until we add drag-to-move later
+    draggable:   false,
+    moveSpeed:   180,     // ms — smooth piece-slide animation
+    snapbackSpeed: 150,
+    snapSpeed:   80,
   });
 
-  // Set board width to match its container dynamically.
+  // Dynamically fit the board to available width.
   const boardEl = document.getElementById('board');
   const resize  = () => {
-    const avail = boardEl.parentElement.clientWidth - 40;
-    const max   = Math.min(avail, 480);
-    boardEl.style.width  = max + 'px';
+    const avail = boardEl.parentElement.clientWidth - 48;
+    const max   = Math.min(avail, parseInt(
+      getComputedStyle(document.documentElement).getPropertyValue('--board-max') || '600'
+    ));
+    boardEl.style.width = max + 'px';
     state.board.resize();
   };
   window.addEventListener('resize', resize);
   resize();
 }
 
-// ── Navigation ─────────────────────────────────────────────
+// ── Last-move highlighting ──────────────────────────────────
+let _lastHighlightSquares = [];
+
+function highlightLastMove(fromSq, toSq) {
+  // Remove old highlights.
+  _lastHighlightSquares.forEach(sq => {
+    $('board').querySelectorAll(`[data-square="${sq}"]`).forEach(el => {
+      el.classList.remove('highlight-last');
+    });
+  });
+  _lastHighlightSquares = [];
+
+  if (!fromSq || !toSq) return;
+
+  [fromSq, toSq].forEach(sq => {
+    $('board').querySelectorAll(`[data-square="${sq}"]`).forEach(el => {
+      el.classList.add('highlight-last');
+    });
+  });
+  _lastHighlightSquares = [fromSq, toSq];
+}
+
+// ── Navigation ──────────────────────────────────────────────
 function goToPly(ply) {
-  // ply 0 = initial position, 1..n = after each half-move.
   if (ply < 0 || ply > state.moves.length) return;
-  state.plyIndex = ply;
 
-  // Replay from starting FEN to reach target ply.
-  const game = new Chess();
-  if (state.initialFen) game.load(state.initialFen);
+  const prevPly   = state.plyIndex;
+  state.plyIndex  = ply;
+
+  // Rebuild board to this ply position.
+  const tmpGame = new Chess();
+  if (state.initialFen) tmpGame.load(state.initialFen);
   for (let i = 0; i < ply; i++) {
-    game.move(state.moves[i].san);
+    tmpGame.move(state.moves[i].san);
   }
-  state.board.position(game.fen(), false);
 
-  // Eval bar: use the eval_after of the last move, or initial eval.
-  const evalScore = ply === 0
-    ? state.initialEval
-    : state.moves[ply - 1].eval_after;
+  // Animate: use chessboard.js's built-in animated position change.
+  state.board.position(tmpGame.fen(), true /* animate */);
+
+  // Determine source/target squares for highlight & sound.
+  if (ply > 0 && ply > prevPly) {
+    // Moving forward: play the move at ply-1 (index ply-1 is 1-based).
+    const moveData  = state.moves[ply - 1];
+    const uci       = moveData.uci;
+    const fromSq    = uci.slice(0, 2);
+    const toSq      = uci.slice(2, 4);
+    highlightLastMove(fromSq, toSq);
+    playMoveSound(moveData, tmpGame);
+  } else if (ply < prevPly && ply > 0) {
+    // Moving backward: show highlight for the move now at top.
+    const moveData  = state.moves[ply - 1];
+    const uci       = moveData.uci;
+    highlightLastMove(uci.slice(0, 2), uci.slice(2, 4));
+  } else {
+    highlightLastMove(null, null);
+  }
+
+  // Update eval bar.
+  const evalScore = ply === 0 ? state.initialEval : state.moves[ply - 1].eval_after;
   if (evalScore) setEvalBar(evalScore);
 
   // Highlight the active move row.
-  document.querySelectorAll('.move-row').forEach(row => row.classList.remove('active'));
+  document.querySelectorAll('.move-row').forEach(r => r.classList.remove('active'));
   if (ply > 0) {
     const activeRow = document.querySelector(`.move-row[data-ply="${ply}"]`);
     if (activeRow) {
       activeRow.classList.add('active');
-      activeRow.scrollIntoView({ block: 'nearest' });
+      activeRow.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     }
   }
 }
 
-// ── Move list rendering ─────────────────────────────────────
+// ── Sound selection ─────────────────────────────────────────
+function playMoveSound(moveData, boardAfter) {
+  const san = moveData.san;
+
+  if (boardAfter.in_checkmate()) {
+    sounds.gameEnd();
+  } else if (boardAfter.in_check()) {
+    sounds.check();
+  } else if (san.includes('O-O')) {
+    sounds.castle();
+  } else if (san.includes('x')) {
+    sounds.capture();
+  } else {
+    sounds.move();
+  }
+}
+
+// ── Move list ───────────────────────────────────────────────
 function renderMoveList(movesData) {
   moveTableBody.innerHTML = '';
   emptyMoves.classList.add('hidden');
 
-  // Group into pairs: white move + black move per row.
   for (let i = 0; i < movesData.length; i += 2) {
-    const whiteMove = movesData[i];
-    const blackMove = movesData[i + 1];
-    const moveNum   = whiteMove.move_number;
-
+    const wm = movesData[i];
+    const bm = movesData[i + 1];
     const tr = document.createElement('tr');
-    tr.className = 'move-row';
+    tr.className   = 'move-row';
+    tr.dataset.ply = wm.ply;   // row highlighted on white move by default
 
-    // Move number cell.
     const tdNum = document.createElement('td');
-    tdNum.className = 'move-num';
-    tdNum.textContent = moveNum;
+    tdNum.className     = 'move-num';
+    tdNum.textContent   = wm.move_number;
     tr.appendChild(tdNum);
 
-    // Helper: build one move cell.
     const makeCell = (move) => {
-      if (!move) return document.createElement('td');
       const td  = document.createElement('td');
-      const div = document.createElement('div');
-      div.className = 'move-cell';
+      if (!move) return td;
+      const div       = document.createElement('div');
+      div.className   = 'move-cell';
       div.dataset.ply = move.ply;
-      div.innerHTML = `${clfDot(move.classification)}<span>${move.san}</span>`;
+      div.innerHTML   = `${clfDot(move.classification)}<span>${move.san}</span>`;
       div.addEventListener('click', () => goToPly(move.ply));
-
-      // The row gets its data-ply from the first (white) move for simple highlighting.
-      tr.dataset.ply = move.ply;
       td.appendChild(div);
       return td;
     };
 
-    tr.appendChild(makeCell(whiteMove));
-    tr.appendChild(makeCell(blackMove));
+    tr.appendChild(makeCell(wm));
+    tr.appendChild(makeCell(bm));
     moveTableBody.appendChild(tr);
   }
 }
 
-// ── Analyse PGN/FEN ─────────────────────────────────────────
+// ── Analyse from input ──────────────────────────────────────
 async function runAnalysis() {
   const raw = pgnInput.value.trim();
   if (!raw) return setStatus('Paste a PGN or FEN first.', 'error');
@@ -177,15 +337,12 @@ async function runAnalysis() {
   setStatus('<span class="spinner"></span> analysing…');
   analyseBtn.disabled = true;
 
-  // Detect FEN vs PGN: a FEN has exactly 6 space-separated tokens and no newlines.
-  const isFen = !raw.includes('\n') && raw.split(' ').length === 6;
+  // Heuristic: FEN = single line, exactly 6 tokens.
+  const isFen = !raw.includes('\n') && raw.split(/\s+/).length === 6;
 
   try {
-    if (isFen) {
-      await analyseFen(raw);
-    } else {
-      await analysePgn(raw);
-    }
+    if (isFen) await analyseFen(raw);
+    else        await analysePgn(raw);
   } catch (err) {
     setStatus(err.message, 'error');
   } finally {
@@ -201,13 +358,14 @@ async function analyseFen(fen) {
   state.moves       = [];
   state.plyIndex    = 0;
 
-  state.board.position(fen, false);
+  state.board.position(fen, true);
   setEvalBar(res.engine.score);
   moveTableBody.innerHTML = '';
   gameHeaders.classList.add('hidden');
-  emptyMoves.textContent = 'FEN loaded. Best move: ' + (res.engine.best_move_san || '—');
+  emptyMoves.textContent = `FEN loaded. Best: ${res.engine.best_move_san || '—'}`;
   emptyMoves.classList.remove('hidden');
-  setStatus('FEN analysed. Depth 12.', 'ok');
+  highlightLastMove(null, null);
+  setStatus('FEN analysed · depth 12', 'ok');
 }
 
 async function analysePgn(pgn) {
@@ -218,12 +376,10 @@ async function analysePgn(pgn) {
   state.moves       = res.moves;
   state.plyIndex    = 0;
 
-  // Update player names.
   playerWhite.textContent = res.headers.white || 'White';
   playerBlack.textContent = res.headers.black || 'Black';
 
-  // Show game header.
-  if (res.headers.white !== '' || res.headers.black !== '') {
+  if (res.headers.white || res.headers.black) {
     gameHeaders.classList.remove('hidden');
     gameHeaders.innerHTML =
       `<div class="header-players">${res.headers.white} vs ${res.headers.black}</div>` +
@@ -233,7 +389,7 @@ async function analysePgn(pgn) {
   renderMoveList(res.moves);
   emptyMoves.classList.add('hidden');
   goToPly(0);
-  setStatus(`Game loaded · ${res.moves.length} half-moves analysed.`, 'ok');
+  setStatus(`Game loaded · ${res.moves.length} half-moves`, 'ok');
 }
 
 // ── Chess.com game loader ───────────────────────────────────
@@ -241,7 +397,7 @@ async function loadChessComGames() {
   const username = $('chesscom-input').value.trim();
   if (!username) return;
 
-  gamesList.innerHTML = '<div class="empty-state"><span class="spinner"></span> loading games…</div>';
+  gamesList.innerHTML = '<div class="empty-state"><span class="spinner"></span> loading…</div>';
   switchTab('games');
 
   try {
@@ -257,52 +413,48 @@ function renderGameCards(games, currentUser) {
     gamesList.innerHTML = '<div class="empty-state">No games found.</div>';
     return;
   }
-
   gamesList.innerHTML = '';
+
   for (const g of games) {
-    const me = g.white.username.toLowerCase() === currentUser.toLowerCase();
-    const myResult = me ? g.white.result : g.black.result;
-    const oppName  = me ? g.black.username : g.white.username;
-    const myRating = me ? g.white.rating : g.black.rating;
-    const oppRating= me ? g.black.rating : g.white.rating;
+    const me      = g.white.username.toLowerCase() === currentUser.toLowerCase();
+    const myRes   = me ? g.white.result : g.black.result;
+    const oppName = me ? g.black.username : g.white.username;
+    const myRat   = me ? g.white.rating : g.black.rating;
+    const oppRat  = me ? g.black.rating : g.white.rating;
 
-    const resultCls = myResult === 'win' ? 'result-win'
-                    : myResult === 'resigned' || myResult === 'checkmated' || myResult === 'timeout' ? 'result-loss'
-                    : 'result-draw';
-    const resultLabel = myResult === 'win' ? 'Win' : (myResult === 'resigned' || myResult === 'checkmated') ? 'Loss' : 'Draw';
-
-    const date = g.end_time
-      ? new Date(g.end_time * 1000).toLocaleDateString()
-      : '';
+    const cls = myRes === 'win' ? 'result-win'
+              : (myRes === 'resigned' || myRes === 'checkmated' || myRes === 'timeout') ? 'result-loss'
+              : 'result-draw';
+    const lbl = myRes === 'win' ? 'Win'
+              : (myRes === 'resigned' || myRes === 'checkmated') ? 'Loss' : 'Draw';
+    const date = g.end_time ? new Date(g.end_time * 1000).toLocaleDateString() : '';
 
     const card = document.createElement('div');
     card.className = 'game-card';
     card.innerHTML =
-      `<div class="game-card-players">${currentUser} (${myRating}) vs ${oppName} (${oppRating})</div>` +
-      `<div class="game-card-meta">` +
-        `<span class="${resultCls}">${resultLabel}</span>` +
-        `<span>${g.time_class}</span>` +
-        `<span>${date}</span>` +
-      `</div>`;
-
+      `<div class="game-card-players">${currentUser} (${myRat}) vs ${oppName} (${oppRat})</div>` +
+      `<div class="game-card-meta">
+        <span class="${cls}">${lbl}</span>
+        <span>${g.time_class}</span>
+        <span>${date}</span>
+      </div>`;
     card.addEventListener('click', () => {
       pgnInput.value = g.pgn;
       switchTab('moves');
       runAnalysis();
     });
-
     gamesList.appendChild(card);
   }
 }
 
 // ── Tab switching ───────────────────────────────────────────
 function switchTab(name) {
-  document.querySelectorAll('.tab-btn').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.tab === name);
-  });
+  document.querySelectorAll('.tab-btn').forEach(btn =>
+    btn.classList.toggle('active', btn.dataset.tab === name));
   document.querySelectorAll('.tab-content').forEach(pane => {
-    pane.classList.toggle('active', pane.id === `tab-${name}`);
-    pane.classList.toggle('hidden', pane.id !== `tab-${name}`);
+    const match = pane.id === `tab-${name}`;
+    pane.classList.toggle('active', match);
+    pane.classList.toggle('hidden', !match);
   });
 }
 
@@ -323,11 +475,12 @@ async function fetchApi(path, method = 'GET', body = null) {
   return res.json();
 }
 
-// ── Event wiring ────────────────────────────────────────────
+// ── Bootstrap ───────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   initBoard();
-  setEvalBar({ type: 'cp', value: 20 });   // neutral-ish start
+  setEvalBar({ type: 'cp', value: 20 });
 
+  // Navigation buttons.
   $('btn-start').addEventListener('click', () => goToPly(0));
   $('btn-prev' ).addEventListener('click', () => goToPly(state.plyIndex - 1));
   $('btn-next' ).addEventListener('click', () => goToPly(state.plyIndex + 1));
@@ -337,26 +490,33 @@ document.addEventListener('DOMContentLoaded', () => {
     state.board.flip();
   });
 
-  $('analyse-btn').addEventListener('click', runAnalysis);
+  $('analyse-btn'  ).addEventListener('click', runAnalysis);
+  $('chesscom-btn' ).addEventListener('click', loadChessComGames);
+
   pgnInput.addEventListener('keydown', e => {
     if (e.key === 'Enter' && e.ctrlKey) runAnalysis();
   });
-
-  $('chesscom-btn').addEventListener('click', loadChessComGames);
   $('chesscom-input').addEventListener('keydown', e => {
     if (e.key === 'Enter') loadChessComGames();
   });
 
-  document.querySelectorAll('.tab-btn').forEach(btn => {
-    btn.addEventListener('click', () => switchTab(btn.dataset.tab));
-  });
+  document.querySelectorAll('.tab-btn').forEach(btn =>
+    btn.addEventListener('click', () => switchTab(btn.dataset.tab)));
 
-  // Keyboard navigation: arrow keys.
+  // Keyboard shortcuts.
   document.addEventListener('keydown', e => {
     if (document.activeElement === pgnInput) return;
-    if (e.key === 'ArrowLeft')  goToPly(state.plyIndex - 1);
-    if (e.key === 'ArrowRight') goToPly(state.plyIndex + 1);
-    if (e.key === 'ArrowUp')    goToPly(0);
-    if (e.key === 'ArrowDown')  goToPly(state.moves.length);
+    if (document.activeElement === $('chesscom-input')) return;
+
+    switch (e.key) {
+      case 'ArrowLeft':  goToPly(state.plyIndex - 1); break;
+      case 'ArrowRight': goToPly(state.plyIndex + 1); break;
+      case 'Home':       goToPly(0);                  break;
+      case 'End':        goToPly(state.moves.length); break;
+      case 'f': case 'F':
+        state.orientation = state.orientation === 'white' ? 'black' : 'white';
+        state.board.flip();
+        break;
+    }
   });
 });
