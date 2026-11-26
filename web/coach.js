@@ -277,19 +277,19 @@
     ], 12, 12)}</g>`,
   ].join('');
 
-  function buildKnightSvg() {
+  function buildKnightSvg(size = 192, idPrefix = 'knight') {
     return `
-      <svg class="knight-pixel-svg" viewBox="0 0 32 32" width="192" height="192" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-        <g id="knight-head">${HEAD_NECK_BASE}</g>
-        <g id="knight-ears">
+      <svg class="knight-pixel-svg" viewBox="0 0 32 32" width="${size}" height="${size}" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <g id="${idPrefix}-head">${HEAD_NECK_BASE}</g>
+        <g id="${idPrefix}-ears">
           <g class="ears-normal">${EARS_NORMAL}</g>
           <g class="ears-depressed">${EARS_DEPRESSED}</g>
         </g>
-        <g id="knight-brows">${BROWS_SVG}</g>
-        <g id="knight-eyes">${EYES_SVG}</g>
-        <g id="knight-pupils">${PUPILS_SVG}</g>
-        <g id="knight-mouth">${MOUTH_SVG}</g>
-        <g id="knight-sweat-tear">${SWEAT_TEAR_SVG}</g>
+        <g id="${idPrefix}-brows">${BROWS_SVG}</g>
+        <g id="${idPrefix}-eyes">${EYES_SVG}</g>
+        <g id="${idPrefix}-pupils">${PUPILS_SVG}</g>
+        <g id="${idPrefix}-mouth">${MOUTH_SVG}</g>
+        <g id="${idPrefix}-sweat-tear">${SWEAT_TEAR_SVG}</g>
       </svg>`;
   }
 
@@ -901,4 +901,5 @@
   }
 
   document.addEventListener('DOMContentLoaded', initKnightCoach);
+  global.BlunderlessChesterArt = { buildKnightSvg };
 })(window);

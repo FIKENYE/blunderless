@@ -27,83 +27,48 @@
     activeReportId: null,
   };
 
-  // ── 1. Pixel-Art Floppy-Disk + Knight Logo (Matches User Reference) ──
-  const FLOPPY_PAL = {
-    E: '#22150E', // Deep Roasted Espresso outline & cutout
-    S: '#3D271E', // Dark Walnut floppy shell
-    H: '#54382B', // Floppy shell edge highlight
-    T: '#C85A2D', // Terracotta metal sliding shutter
-    G: '#E27A4E', // Terracotta shutter top-left glint
-    B: '#C49A6C', // Warm tan label header & knight shading
-    L: '#FAF2DC', // Cream parchment floppy label & knight highlight
-    D: '#D6BE96', // Subtle dotted label lines
-    W: '#FFFDF7', // Bright pixel accent
-  };
+  // ── 1. Brand Art & Landing Interactive Data ─────────────────────────
+  function initBrandArt() {
+    // Render large interactive Chester inside the Landing Hero Portrait Frame
+    const heroArt = $('lp-chester-art');
+    if (heroArt && global.BlunderlessChesterArt?.buildKnightSvg) {
+      heroArt.innerHTML = global.BlunderlessChesterArt.buildKnightSvg(216, 'hero-knight');
+    }
+  }
 
-  const FLOPPY_GRID = [
-    '.EEEEEEEEEEEEEEEEEEEE...',
-    'EHSSSSETTTTTTTTTTESSSE..',
-    'ESESSSWTTTTTTTTTTESSSSE.',
-    'ESESSSGTTTTTTEEEETSSSSSE',
-    'ESSSSSETTTTTTEEETESSSSSE',
-    'ESSSSSETTTTTTEEETESSSSSE',
-    'ESSSSSETTTTTTEEETESSSSSE',
-    'ESSSSSEEEEEEEEEEEESSSSSE',
-    'ESSSSSSSSSSSSSSSSSSSSSSE',
-    'ESSSSEEEEEEEEEEEEEESSSSE',
-    'ESSSSEBBBBEEBBBBBBESSSSE',
-    'ESSSSEBBBEELBBBBBESSSSSE',
-    'ESSSSELLLEELLLELLLESSSSE',
-    'ESSSSLDDELWLLLLEDDESSSSE',
-    'ESSSSLLEEELLLLBELDLESSSS',
-    'ESSSSLDDDEEELLBELDDESSSS',
-    'ESSSSLLEEELLLLBELDLESSSS',
-    'ESSSSLDDDDELLBBELLDESSSS',
-    'ESSSSLBBBEEEEEEBBBLESSSS',
-    'ESSSSBEEELLLLBBEEEBESSSS',
-    'ESSSSBEELLLLLLLLBEBESSSS',
-    'ESSSSEEEEEEEEEEEEEESSSSE',
-    'ESESSSSSSSSSSSSSSSSSSLSE',
-    '.EEEEEEEEEEEEEEEEEEEEEE.',
+  // Interactive Hero Chester quips & Sample Review showcase switcher
+  const HERO_QUIPS = [
+    { state: 'deadpan', mood: 'DEADPAN · CLICK CHESTER', evalTag: '-3.40', text: 'Chester: "I\'ve seen that blunder before."' },
+    { state: 'smug', mood: 'NOT BAD · CLICK CHESTER', evalTag: '+1.85', text: 'Chester: "Link your account. Let\'s see that rating."' },
+    { state: 'flabbergasted', mood: 'MY EYES · CLICK CHESTER', evalTag: '-8.20', text: 'Chester: "Wait—you hung your queen on move 9?!"' },
+    { state: 'suspicious', mood: 'HMMM... · CLICK CHESTER', evalTag: '+0.40', text: 'Chester: "96% accuracy? Blink twice if Stockfish helped."' },
+    { state: 'brilliant_shock', mood: 'WHAT?! · CLICK CHESTER', evalTag: '+4.60', text: 'Chester: "WAIT A SECOND—a real sound sacrifice?!"' },
   ];
+  let _heroQuipIdx = 0;
 
-  function buildFloppyKnightSvg(pxSize = 30) {
-    const rects = [];
-    for (let r = 0; r < FLOPPY_GRID.length; r++) {
-      const row = FLOPPY_GRID[r];
-      let c = 0;
-      while (c < row.length) {
-        const ch = row[c];
-        if (!FLOPPY_PAL[ch]) {
-          c++;
-          continue;
-        }
-        let run = 1;
-        while (c + run < row.length && row[c + run] === ch) run++;
-        rects.push(`<rect x="${c}" y="${r}" width="${run}" height="1" fill="${FLOPPY_PAL[ch]}"/>`);
-        c += run;
-      }
-    }
-    return `<svg viewBox="0 0 24 24" width="${pxSize}" height="${pxSize}" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg" class="floppy-logo-svg">${rects.join('')}</svg>`;
-  }
-
-  function injectBrandLogos() {
-    const topSlot = $('brand-logo-slot');
-    if (topSlot) topSlot.innerHTML = buildFloppyKnightSvg(28);
-    const heroSlot = $('home-hero-logo');
-    if (heroSlot) heroSlot.innerHTML = buildFloppyKnightSvg(120);
-
-    // Also set crisp SVG favicon in <head>
-    const svgStr = buildFloppyKnightSvg(32);
-    const uri = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgStr);
-    let link = document.querySelector("link[rel='icon']");
-    if (!link) {
-      link = document.createElement('link');
-      link.rel = 'icon';
-      document.head.appendChild(link);
-    }
-    link.href = uri;
-  }
+  const SAMPLE_REVIEWS = [
+    {
+      stage: 'OPENING',
+      title: 'Move 8: Inaccuracy',
+      evalShift: '+0.20 → -0.85',
+      engine: 'You pushed a flank pawn while two minor pieces were still on the back rank. Stockfish prefers developing Nf6 and preparing to castle.',
+      chester: "Chester's note: Get both knights and bishops out and tuck your king away before starting side attacks.",
+    },
+    {
+      stage: 'MIDDLEGAME',
+      title: 'Move 23: Blunder',
+      evalShift: '+0.35 → -3.40',
+      engine: "You moved a defender away from your king's side. Stockfish's top line keeps it in place and holds the position level.",
+      chester: "Chester's note: This is a pattern, not a one-off. Check what your last piece was guarding before you move it.",
+    },
+    {
+      stage: 'ENDGAME',
+      title: 'Move 38: Miss',
+      evalShift: '+2.80 → +0.15',
+      engine: 'Your king stayed passive on the back rank instead of marching toward the center. Stockfish plays Kf6 to seize the key squares.',
+      chester: "Chester's note: Once the queens come off, your king becomes a fighting piece. Activate it immediately.",
+    },
+  ];
 
   // ── 2. API Helper ───────────────────────────────────────────────────
   async function api(path, method = 'GET', body = null) {
@@ -139,7 +104,14 @@
     return `${Math.floor(diff / 86400)}d ago`;
   }
 
-  // ── 3. 4-View Router ────────────────────────────────────────────────
+  // ── 3. 4-View Router & Landing Mode Chrome Toggle ───────────────────
+  function syncLandingMode() {
+    const landingVisible =
+      pState.view === 'home' &&
+      !($('home-landing-flow')?.classList.contains('hidden'));
+    document.body.classList.toggle('landing-mode', landingVisible);
+  }
+
   function switchAppView(viewName) {
     const valid = ['home', 'analyze', 'games', 'insights'];
     if (!valid.includes(viewName)) viewName = 'home';
@@ -156,6 +128,8 @@
       el.classList.toggle('active', v === viewName);
       el.classList.toggle('hidden', v !== viewName);
     });
+
+    syncLandingMode();
 
     if (viewName === 'analyze') {
       setTimeout(() => global.BlunderlessBoard?.resize(), 30);
@@ -233,6 +207,10 @@
 
     const gHint = $('modal-google-hint');
     if (gHint) gHint.classList.toggle('hidden', Boolean(auth.google_configured));
+    const redirectEl = $('modal-redirect-uri');
+    if (redirectEl && auth.google_redirect_uri) {
+      redirectEl.textContent = auth.google_redirect_uri;
+    }
 
     const ccAcc = accounts.find((a) => a.platform === 'chesscom');
     const liAcc = accounts.find((a) => a.platform === 'lichess');
@@ -425,11 +403,12 @@
 
   function renderHomeView(data) {
     const hasLinked = Boolean(data && data.authenticated && (data.linked_accounts || []).length > 0);
-    const heroCard = $('home-hero-card');
     const dashEl = $('home-dashboard');
+    const landingEl = $('home-landing-flow');
 
-    if (heroCard) heroCard.classList.toggle('compact-hero', hasLinked);
     if (dashEl) dashEl.classList.toggle('hidden', !hasLinked);
+    if (landingEl) landingEl.classList.toggle('hidden', hasLinked);
+    syncLandingMode();
     if (!hasLinked) return;
 
     const accounts = data.linked_accounts || [];
@@ -1072,7 +1051,7 @@
   }
 
   function initPlatform() {
-    injectBrandLogos();
+    initBrandArt();
 
     // Topbar Navigation
     $('brand-home-btn')?.addEventListener('click', () => switchAppView('home'));
@@ -1086,18 +1065,64 @@
       if (e.key === 'Enter') switchAppView('analyze');
     });
 
-    // Hero buttons
-    $('hero-google-btn')?.addEventListener('click', handleGoogleSignIn);
-    $('hero-account-btn')?.addEventListener('click', openAccountModal);
-    $('hero-sample-btn')?.addEventListener('click', () => {
+    // Landing Navbar smooth scrolling & navigation
+    $('lp-brand-link')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      $('view-home')?.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+    document.querySelectorAll('[data-lp-scroll]').forEach((link) => {
+      link.addEventListener('click', (e) => {
+        e.preventDefault();
+        const target = $(link.dataset.lpScroll);
+        if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    });
+    $('lp-open-board-btn')?.addEventListener('click', () => switchAppView('analyze'));
+    $('lp-sand-board-btn')?.addEventListener('click', () => switchAppView('analyze'));
+    $('lp-signin-btn')?.addEventListener('click', openAccountModal);
+
+    // Landing Hero & Footer CTAs
+    $('lp-hero-cta')?.addEventListener('click', handleGoogleSignIn);
+    $('lp-footer-cta')?.addEventListener('click', handleGoogleSignIn);
+    $('lp-hero-sample')?.addEventListener('click', () => {
       switchAppView('analyze');
       global.BlunderlessBoard?.loadSample();
     });
-    $('qc-link-btn')?.addEventListener('click', () => {
-      handleLinkAccount($('qc-platform').value, $('qc-username').value, $('qc-status'));
+
+    // Interactive Chester Portrait (cycles mood, quip & eval chip)
+    $('lp-chester-btn')?.addEventListener('click', () => {
+      _heroQuipIdx = (_heroQuipIdx + 1) % HERO_QUIPS.length;
+      const q = HERO_QUIPS[_heroQuipIdx];
+      const stage = $('lp-chester-stage');
+      if (stage) stage.dataset.state = q.state;
+      if ($('lp-chester-quip')) $('lp-chester-quip').textContent = q.text;
+      if ($('lp-chester-mood')) $('lp-chester-mood').textContent = q.mood;
+      if ($('lp-chester-eval')) $('lp-chester-eval').textContent = q.evalTag;
     });
-    $('qc-username')?.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') handleLinkAccount($('qc-platform').value, $('qc-username').value, $('qc-status'));
+
+    // Sample Review phase switcher inside the elevated card
+    document.querySelectorAll('#lp-sample-tabs .lp-phase-tab').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const idx = parseInt(btn.dataset.idx, 10) || 0;
+        const item = SAMPLE_REVIEWS[idx];
+        if (!item) return;
+        document.querySelectorAll('#lp-sample-tabs .lp-phase-tab').forEach((b) => {
+          const active = b === btn;
+          b.classList.toggle('active', active);
+          b.setAttribute('aria-selected', active ? 'true' : 'false');
+        });
+        if ($('lp-demo-stage')) $('lp-demo-stage').textContent = item.stage;
+        if ($('lp-demo-title')) $('lp-demo-title').textContent = item.title;
+        if ($('lp-demo-eval')) $('lp-demo-eval').textContent = item.evalShift;
+        if ($('lp-demo-engine')) $('lp-demo-engine').textContent = item.engine;
+        if ($('lp-demo-chester')) $('lp-demo-chester').textContent = item.chester;
+      });
+    });
+
+    // Quick Connect Form
+    $('lp-connect-form')?.addEventListener('submit', (e) => {
+      e.preventDefault();
+      handleLinkAccount($('qc-platform').value, $('qc-username').value, $('qc-status'));
     });
 
     // Home Dashboard controls
@@ -1215,7 +1240,26 @@
       }
     });
 
-    // Initial boot: restore auth + view
+    $('modal-local-name')?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') $('modal-local-btn')?.click();
+    });
+    $('modal-cc-input')?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') $('modal-cc-link-btn')?.click();
+    });
+    $('modal-li-input')?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') $('modal-li-link-btn')?.click();
+    });
+
+    // Initial boot: restore auth + view and surface any OAuth callback status
+    const urlParams = new URLSearchParams(window.location.search);
+    const authError = urlParams.get('auth_error');
+    const authOk = urlParams.get('auth');
+    if (authError || authOk) {
+      try {
+        window.history.replaceState({}, document.title, window.location.pathname);
+      } catch (_) {}
+    }
+
     refreshAuth().then(() => {
       let startView = 'home';
       try {
@@ -1223,6 +1267,11 @@
         if (saved && ['home', 'analyze', 'games', 'insights'].includes(saved)) startView = saved;
       } catch (_) {}
       switchAppView(startView);
+
+      if (authError) {
+        openAccountModal();
+        $('modal-status').textContent = authError;
+      }
     });
   }
 

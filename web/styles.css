@@ -2496,9 +2496,15 @@ body {
   line-height: 0;
 }
 
-.floppy-logo-svg {
-  image-rendering: pixelated;
+.brand-logo-img {
   display: block;
+  image-rendering: pixelated;
+  object-fit: contain;
+}
+
+/* Hide full app topbar while showing the clean signed-out landing page */
+body.landing-mode .topbar {
+  display: none;
 }
 
 .primary-nav {
@@ -2585,12 +2591,744 @@ body {
   padding: 20px 28px 40px;
 }
 
+/* Home Landing uses full-bleed bands with zero outer padding */
+#view-home.view-scroll {
+  padding: 0;
+}
+
+.home-dashboard-wrap {
+  padding: 22px 28px 44px;
+}
+
 .page-shell {
   max-width: 1180px;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+/* =========================================================================
+   REBUILT LANDING PAGE (Editorial Retro-Pixel — Clean & Airy)
+   ========================================================================= */
+.lp-shell {
+  width: 100%;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--canvas);
+  color: var(--espresso);
+}
+
+.lp-inner {
+  width: 100%;
+  max-width: 1060px;
+  margin: 0 auto;
+}
+
+/* ── Dedicated Landing Header ── */
+.lp-nav {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: rgba(250, 246, 240, 0.96);
+  backdrop-filter: blur(4px);
+  border-bottom: 1px solid rgba(43, 26, 18, 0.14);
+  padding: 0 36px;
+}
+
+.lp-nav-inner {
+  height: 68px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.lp-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  color: var(--espresso);
+}
+
+.lp-brand-logo {
+  display: block;
+  image-rendering: pixelated;
+  object-fit: contain;
+}
+
+.lp-brand-name {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--espresso);
+}
+
+.lp-nav-links {
+  display: flex;
+  align-items: center;
+  gap: 26px;
+}
+
+.lp-nav-link {
+  font-family: var(--font);
+  font-size: 12.5px;
+  color: var(--roast);
+  text-decoration: none;
+  transition: color 0.12s ease;
+}
+
+.lp-nav-btn-link {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+.lp-nav-link:hover {
+  color: var(--espresso);
+}
+
+.lp-signin-btn {
+  font-family: var(--font);
+  font-size: 12.5px;
+  font-weight: 700;
+  padding: 7px 16px;
+  border: 1.5px solid var(--espresso);
+  background: #FFFDF9;
+  color: var(--espresso);
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.lp-signin-btn:hover {
+  background: var(--espresso);
+  color: var(--canvas);
+}
+
+/* ── Band 1: Asymmetric Hero ── */
+.lp-hero-band {
+  padding: 60px 36px 56px;
+  display: flex;
+  flex-direction: column;
+  gap: 54px;
+}
+
+.lp-hero-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+  gap: 52px;
+  align-items: center;
+}
+
+.lp-hero-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.lp-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--cta-terracotta);
+}
+
+.lp-eyebrow-dot {
+  width: 7px;
+  height: 7px;
+  background: var(--cta-terracotta);
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.lp-hero-title {
+  font-size: clamp(38px, 5vw, 58px);
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  color: var(--espresso);
+}
+
+.lp-hero-lead {
+  font-size: 14.5px;
+  line-height: 1.7;
+  color: var(--roast);
+  max-width: 480px;
+}
+
+.lp-hero-actions {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+
+.lp-btn-primary {
+  font-family: var(--font);
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 13px 24px;
+  border: 1.5px solid var(--espresso);
+  background: var(--cta-terracotta);
+  color: #FAF6F0;
+  cursor: pointer;
+  box-shadow: 4px 4px 0 var(--espresso);
+  transition: transform 0.1s ease, box-shadow 0.1s ease, background 0.12s ease;
+}
+
+.lp-btn-primary:hover {
+  background: #B55B2A;
+  transform: translate(-1px, -1px);
+  box-shadow: 5px 5px 0 var(--espresso);
+}
+
+.lp-btn-primary:active {
+  transform: translate(2px, 2px);
+  box-shadow: 2px 2px 0 var(--espresso);
+}
+
+.lp-btn-link {
+  font-family: var(--font);
+  font-size: 13px;
+  font-weight: 700;
+  background: transparent;
+  border: none;
+  border-bottom: 1.5px solid var(--espresso);
+  padding: 4px 0;
+  color: var(--espresso);
+  cursor: pointer;
+  align-self: flex-start;
+  transition: color 0.12s ease, border-color 0.12s ease;
+}
+
+.lp-btn-link:hover {
+  color: var(--cta-terracotta);
+  border-color: var(--cta-terracotta);
+}
+
+/* Framed Chester Portrait Stage */
+.lp-hero-visual {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.lp-portrait-stage {
+  position: relative;
+  width: 356px;
+  max-width: 100%;
+}
+
+.lp-speech-tag {
+  position: absolute;
+  top: -16px;
+  right: -18px;
+  z-index: 3;
+  max-width: 248px;
+  background: #FFFDF9;
+  border: 1.5px solid var(--espresso);
+  box-shadow: 4px 4px 0 var(--espresso);
+  padding: 9px 13px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  font-weight: 700;
+  color: var(--espresso);
+}
+
+.lp-portrait-card {
+  width: 100%;
+  background: #E7D8BE;
+  border: 1.5px solid var(--espresso);
+  box-shadow: 7px 7px 0 var(--espresso);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  padding: 28px 20px 0;
+  overflow: hidden;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.lp-portrait-card:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 9px 9px 0 var(--espresso);
+}
+
+.lp-portrait-art {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 0 14px;
+}
+
+.lp-portrait-art .knight-pixel-svg {
+  width: 216px;
+  height: 216px;
+  animation: knightFloat 2.6s ease-in-out infinite;
+}
+
+.lp-portrait-stage[data-state="deadpan"] .expr-deadpan,
+.lp-portrait-stage[data-state="smug"] .expr-smug,
+.lp-portrait-stage[data-state="suspicious"] .expr-suspicious,
+.lp-portrait-stage[data-state="flabbergasted"] .expr-flabbergasted,
+.lp-portrait-stage[data-state="brilliant_shock"] .expr-brilliant_shock {
+  display: inline;
+}
+
+.lp-portrait-bar {
+  width: calc(100% + 40px);
+  margin: 0 -20px;
+  padding: 8px 14px;
+  background: rgba(250, 246, 240, 0.72);
+  border-top: 1px solid rgba(43, 26, 18, 0.28);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.lp-portrait-mood {
+  font-family: var(--font);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--roast);
+}
+
+.lp-portrait-eval {
+  font-family: var(--font);
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 2px 7px;
+  background: var(--espresso);
+  color: var(--canvas);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Band 2: Crisp Flat Quick-Connect Bar ── */
+.lp-connect-bar {
+  border: 1.5px solid var(--espresso);
+  background: #FFFDF9;
+  padding: 20px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.lp-connect-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 310px;
+}
+
+.lp-connect-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--espresso);
+}
+
+.lp-connect-sub {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--roast);
+}
+
+.lp-connect-form {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  flex: 1;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.lp-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.lp-field-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  color: var(--roast);
+}
+
+.lp-field-site {
+  width: 132px;
+}
+
+.lp-field-user {
+  flex: 1;
+  min-width: 190px;
+  max-width: 310px;
+}
+
+.lp-input {
+  font-family: var(--font);
+  font-size: 13px;
+  height: 38px;
+  padding: 0 11px;
+  border: 1.5px solid var(--espresso);
+  background: var(--canvas);
+  color: var(--espresso);
+  outline: none;
+  width: 100%;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+
+.lp-input:focus {
+  border-color: var(--cta-terracotta);
+  background: #FFFDF9;
+}
+
+.lp-btn-dark {
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  height: 38px;
+  padding: 0 20px;
+  border: 1.5px solid var(--espresso);
+  background: var(--espresso);
+  color: #FAF6F0;
+  cursor: pointer;
+  box-shadow: 3px 3px 0 var(--cta-terracotta);
+  transition: transform 0.1s ease, background 0.12s ease;
+}
+
+.lp-btn-dark:hover {
+  background: #3B241A;
+  transform: translate(-1px, -1px);
+}
+
+.lp-btn-dark:active {
+  transform: translate(1px, 1px);
+}
+
+/* ── Band 3: Full-Bleed Warm Sand Feature Band ── */
+.lp-sand-band {
+  background: #E7D8BE;
+  border-top: 1px solid rgba(43, 26, 18, 0.45);
+  border-bottom: 1px solid rgba(43, 26, 18, 0.45);
+  padding: 72px 36px;
+}
+
+.lp-sand-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+  gap: 52px;
+  align-items: center;
+}
+
+.lp-sand-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.lp-section-title {
+  font-size: clamp(26px, 3.2vw, 36px);
+  font-weight: 700;
+  line-height: 1.15;
+  color: var(--espresso);
+}
+
+.lp-section-lead {
+  font-size: 14px;
+  line-height: 1.68;
+  color: #4A3224;
+}
+
+.lp-sand-link {
+  margin-top: 4px;
+  font-size: 12.5px;
+}
+
+.lp-review-card {
+  background: #FFFDF9;
+  border: 1.5px solid var(--espresso);
+  box-shadow: 6px 6px 0 var(--espresso);
+  padding: 24px 26px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+}
+
+.lp-review-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.lp-review-kicker {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--roast);
+}
+
+.lp-stage-badge {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 3px 9px;
+  background: var(--cta-terracotta);
+  color: #FAF6F0;
+}
+
+.lp-review-title-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.lp-review-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--espresso);
+}
+
+.lp-eval-chip {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border: 1px solid var(--espresso);
+  background: var(--canvas);
+  color: var(--espresso);
+  font-variant-numeric: tabular-nums;
+}
+
+.lp-review-engine {
+  font-size: 13.5px;
+  line-height: 1.62;
+  color: var(--espresso);
+}
+
+.lp-review-rule {
+  border: none;
+  border-top: 1px dashed rgba(43, 26, 18, 0.45);
+  margin: 2px 0;
+}
+
+.lp-review-note {
+  font-size: 13px;
+  line-height: 1.6;
+  color: #5A3B2B;
+}
+
+.lp-review-tabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(43, 26, 18, 0.12);
+}
+
+.lp-phase-tab {
+  font-family: var(--font);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--roast);
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.lp-phase-tab:hover {
+  color: var(--espresso);
+  border-color: rgba(43, 26, 18, 0.3);
+}
+
+.lp-phase-tab.active {
+  background: var(--espresso);
+  color: var(--canvas);
+  border-color: var(--espresso);
+}
+
+/* ── Band 4: How It Works (Clean Flat Cards) ── */
+.lp-steps-band {
+  background: var(--canvas);
+  padding: 76px 36px;
+}
+
+.lp-steps-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 32px;
+}
+
+.lp-steps-kicker {
+  font-size: 12.5px;
+  color: var(--roast);
+}
+
+.lp-steps-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 24px;
+}
+
+.lp-step-card {
+  background: #FFFDF9;
+  border: 1.5px solid var(--espresso);
+  padding: 26px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.lp-step-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 4px 4px 0 var(--espresso);
+}
+
+.lp-step-num {
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--cta-terracotta);
+}
+
+.lp-step-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--espresso);
+}
+
+.lp-step-desc {
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--roast);
+}
+
+/* ── Band 5: Deep Espresso Final CTA ── */
+.lp-dark-cta {
+  background: #22150E;
+  color: #FAF6F0;
+  padding: 58px 36px;
+}
+
+.lp-dark-cta-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 28px;
+  flex-wrap: wrap;
+}
+
+.lp-dark-title {
+  font-size: clamp(24px, 3vw, 34px);
+  font-weight: 700;
+  line-height: 1.18;
+  color: #FAF6F0;
+}
+
+.lp-btn-on-dark {
+  border-color: #FAF6F0;
+  box-shadow: 4px 4px 0 #FAF6F0;
+}
+
+.lp-btn-on-dark:hover {
+  box-shadow: 5px 5px 0 #FAF6F0;
+}
+
+/* ── Band 6: Minimal Editorial Footer ── */
+.lp-footer {
+  background: var(--canvas);
+  border-top: 1px solid rgba(43, 26, 18, 0.22);
+  padding: 20px 36px;
+}
+
+.lp-footer-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.lp-footer-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--espresso);
+}
+
+.lp-footer-logo {
+  display: block;
+  image-rendering: pixelated;
+  object-fit: contain;
+}
+
+.lp-footer-meta {
+  font-size: 11.5px;
+  color: var(--roast);
+}
+
+.modal-redirect-uri {
+  margin: 6px 0;
+  padding: 5px 8px;
+  background: #FFFDF9;
+  border: 1px solid var(--border-muted);
+  color: var(--espresso);
+  font-size: 11px;
+  word-break: break-all;
+  user-select: all;
+}
+
+@media (max-width: 900px) {
+  .lp-nav,
+  .lp-hero-band,
+  .lp-sand-band,
+  .lp-steps-band,
+  .lp-dark-cta,
+  .lp-footer {
+    padding-left: 20px;
+    padding-right: 20px;
+  }
+  .lp-nav-links {
+    gap: 14px;
+  }
+  .lp-nav-link {
+    display: none;
+  }
+  .lp-hero-grid,
+  .lp-sand-grid,
+  .lp-steps-grid {
+    grid-template-columns: 1fr;
+  }
+  .lp-hero-visual {
+    justify-content: flex-start;
+  }
+  .lp-speech-tag {
+    right: 8px;
+  }
 }
 
 .editorial-card {
@@ -2633,105 +3371,6 @@ body {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
-}
-
-/* ── HOME Landing Hero ── */
-.home-hero-card {
-  border: 2px solid var(--espresso);
-  border-radius: 2px;
-  background: #FFFDF9;
-  box-shadow: 4px 4px 0 var(--espresso);
-  padding: 22px 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-}
-
-.home-hero-card.compact-hero {
-  display: none;
-}
-
-.hero-left {
-  display: flex;
-  align-items: center;
-  gap: 24px;
-  flex-wrap: wrap;
-}
-
-.home-hero-logo {
-  padding: 10px;
-  border: 2px solid var(--espresso);
-  background: var(--canvas);
-  box-shadow: 3px 3px 0 var(--espresso);
-  flex-shrink: 0;
-}
-
-.hero-copy {
-  flex: 1;
-  min-width: 280px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.hero-kicker {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  color: var(--cta-terracotta);
-}
-
-.hero-headline {
-  font-size: 26px;
-  line-height: 1.2;
-  color: var(--espresso);
-}
-
-.hero-sub {
-  font-size: 13px;
-  line-height: 1.55;
-  color: var(--roast);
-  max-width: 640px;
-}
-
-.hero-cta-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin-top: 4px;
-}
-
-.hero-quick-connect {
-  border-top: 1.5px dashed var(--border-muted);
-  padding-top: 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.qc-title {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  color: var(--roast);
-}
-
-.qc-row {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  max-width: 560px;
-}
-
-.qc-row .text-input {
-  flex: 1;
-  min-width: 180px;
-}
-
-.qc-status {
-  font-size: 11.5px;
-  color: var(--roast);
 }
 
 /* ── HOME ELO Tracker & Dashboard ── */

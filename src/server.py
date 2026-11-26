@@ -25,8 +25,10 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from src.auth import (
+    OAUTH_STATE_COOKIE,
     SESSION_COOKIE,
     create_google_login_url,
+    get_google_config,
     is_google_configured,
     login_local_profile,
     logout_session,
@@ -645,15 +647,22 @@ def _sync_single_account(user_id: int, platform: str, username: str, limit: int 
 
 # ── Auth Endpoints (Google OAuth + Local Profile) ────────────────────────────
 
+def _request_origin(request: Request) -> str:
+    """Return `scheme://host[:port]` for the current request so OAuth URIs match."""
+    return f"{request.url.scheme}://{request.url.netloc}"
+
+
 @app.get("/api/auth/me")
 def auth_me_endpoint(request: Request) -> dict[str, Any]:
     user = _current_user(request)
     linked = get_linked_accounts(user["id"]) if user else []
+    google_cfg = get_google_config(base_url=_request_origin(request))
     return {
         "authenticated": bool(user),
         "user": user,
         "linked_accounts": linked,
         "google_configured": is_google_configured(),
+        "google_redirect_uri": google_cfg["redirect_uri"],
     }
 
 
@@ -678,22 +687,67 @@ def auth_logout_endpoint(request: Request, response: Response) -> dict[str, Any]
 
 
 @app.get("/auth/google/login")
-def google_login_redirect():
+def google_login_redirect(request: Request):
     if not is_google_configured():
-        raise HTTPException(
-            status_code=501,
-            detail="Google OAuth is not configured yet. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET environment variables.",
+        msg = urllib.parse.quote(
+            "Google OAuth is not configured yet. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET."
         )
-    return RedirectResponse(url=create_google_login_url(), status_code=302)
+        return RedirectResponse(url=f"/?auth_error={msg}", status_code=302)
+
+    auth_url, oauth_state = create_google_login_url(base_url=_request_origin(request))
+    resp = RedirectResponse(url=auth_url, status_code=302)
+    resp.set_cookie(
+        key=OAUTH_STATE_COOKIE,
+        value=oauth_state,
+        httponly=True,
+        samesite="lax",
+        max_age=600,
+    )
+    return resp
 
 
 @app.get("/auth/google/callback")
-def google_oauth_callback(code: str = Query(...), state: str = Query(...)):
+def google_oauth_callback(
+    request: Request,
+    code: Optional[str] = Query(default=None),
+    state: Optional[str] = Query(default=None),
+    error: Optional[str] = Query(default=None),
+    error_description: Optional[str] = Query(default=None),
+):
+    if error:
+        reason = error_description or error
+        resp = RedirectResponse(
+            url=f"/?auth_error={urllib.parse.quote(f'Google sign-in cancelled or failed: {reason}')}",
+            status_code=302,
+        )
+        resp.delete_cookie(OAUTH_STATE_COOKIE)
+        return resp
+
+    if not code or not state:
+        resp = RedirectResponse(
+            url=f"/?auth_error={urllib.parse.quote('Missing authorization code from Google.')}",
+            status_code=302,
+        )
+        resp.delete_cookie(OAUTH_STATE_COOKIE)
+        return resp
+
     try:
-        _, token = verify_and_exchange_google_code(code, state)
+        _, token = verify_and_exchange_google_code(
+            code=code,
+            state=state,
+            expected_state=request.cookies.get(OAUTH_STATE_COOKIE),
+            base_url=_request_origin(request),
+        )
     except (ValueError, RuntimeError) as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        resp = RedirectResponse(
+            url=f"/?auth_error={urllib.parse.quote(str(exc))}",
+            status_code=302,
+        )
+        resp.delete_cookie(OAUTH_STATE_COOKIE)
+        return resp
+
     resp = RedirectResponse(url="/?auth=google_ok", status_code=302)
+    resp.delete_cookie(OAUTH_STATE_COOKIE)
     resp.set_cookie(
         key=SESSION_COOKIE,
         value=token,
