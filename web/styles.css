@@ -1,10 +1,10 @@
 /* =========================================================
-   Blunderless — Coffee Terminal Chess (v5 Refactored)
+   Blunderless — Coffee Terminal Chess (v6 Refactored)
    Warm Parchment / Espresso Palette:
    --canvas:    #FAF6F0 (warm parchment)
-   --espresso:  #3B2314 (deep espresso border & ink)
+   --espresso:  #2B1A12 (deep espresso border & ink)
    --tan-dark:  #A67B5B (medium-light tan for dark squares)
-   --light-sq:  #F5EFE6 (light squares)
+   --light-sq:  #FAF6F0 (warm ivory light squares)
    --caramel:   #C08552 (accent highlights)
    --cta-terracotta: #C86D3B (primary CTA fill)
    --roast:     #8C5A3C (muted labels)
@@ -14,13 +14,14 @@
 
 :root {
   --canvas: #FAF6F0;
-  --espresso: #3B2314;
+  --espresso: #2B1A12;
+  --black-piece: #22150E;
   --tan-dark: #A67B5B;
-  --light-sq: #F5EFE6;
+  --light-sq: #FAF6F0;
   --caramel: #C08552;
   --cta-terracotta: #C86D3B;
   --roast: #8C5A3C;
-  --border-muted: rgba(59, 35, 20, 0.25);
+  --border-muted: rgba(43, 26, 18, 0.22);
 
   /* Semantic Move Classifications */
   --c-best: #2E7D32;       /* Emerald Green */
@@ -28,6 +29,11 @@
   --c-inaccuracy: #D9822B; /* Warm Amber */
   --c-mistake: #D9534F;    /* Orange-Red */
   --c-blunder: #B71C1C;    /* Deep Crimson */
+
+  /* Win/Draw/Loss Bar Colors */
+  --c-win: #FAF6F0;        /* White win (warm ivory) */
+  --c-draw: #8C5A3C;       /* Draw (roast/gray-brown) */
+  --c-loss: #22150E;       /* Black win (espresso) */
 
   --topbar-h: 52px;
   --eval-w: 28px;
@@ -415,17 +421,8 @@ body {
 .chess-board img,
 .chess-board svg {
   pointer-events: none !important;
-}
-
-/* Black pieces drop filter: subtle rim shadow so deep charcoal stands out on tan */
-.chess-board img[src*="data:image/svg+xml"][src*="fill%3D%22%231B130F%22"],
-.chess-board img[src*="bP"],
-.chess-board img[src*="bR"],
-.chess-board img[src*="bN"],
-.chess-board img[src*="bB"],
-.chess-board img[src*="bQ"],
-.chess-board img[src*="bK"] {
-  filter: drop-shadow(0 0 1px rgba(250, 246, 240, 0.45));
+  /* Vector pieces crisp rendering & subtle natural drop-shadow */
+  filter: drop-shadow(0 2px 2px rgba(34, 21, 14, 0.25));
 }
 
 /* Last move flat highlight */
@@ -434,7 +431,7 @@ body {
   box-shadow: inset 0 0 0 2px var(--espresso) !important;
 }
 
-/* Board Coordinates (1–8 and a–h) */
+/* Board Coordinates (1–8 and a–h) rendered crisply inside edge squares */
 .chess-board .notation-322f9 {
   font-family: var(--font) !important;
   font-size: 12px !important;
@@ -905,6 +902,234 @@ body {
   font-variant-numeric: tabular-nums;
   line-height: 1.35;
   padding-right: 10px !important;
+}
+
+/* ── Openings Tab View (Hero Card + Candidates Table) ── */
+.openings-view {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.opening-hero-card {
+  padding: 10px 14px;
+  border-bottom: 1.5px solid var(--espresso);
+  background: #FFFDF9;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.hero-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.hero-eco-badge {
+  font-size: 12px;
+  font-weight: 700;
+  background: var(--espresso);
+  color: #FAF6F0;
+  padding: 2px 6px;
+  border-radius: 2px;
+  letter-spacing: 0.05em;
+}
+
+.db-toggle-group {
+  display: inline-flex;
+  border: 1px solid var(--espresso);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.db-toggle-btn {
+  font-family: var(--font);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border: none;
+  background: var(--canvas);
+  color: var(--espresso);
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.db-toggle-btn.active {
+  background: var(--espresso);
+  color: #FAF6F0;
+}
+
+.hero-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--espresso);
+  line-height: 1.3;
+}
+
+.hero-stats-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--roast);
+}
+
+.hero-stat-best {
+  font-weight: 600;
+  color: var(--espresso);
+}
+
+/* Out of book banner */
+.out-of-book-banner {
+  padding: 8px 12px;
+  background: rgba(217, 130, 43, 0.15);
+  border-bottom: 1.5px solid var(--espresso);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.oob-text {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--espresso);
+}
+
+.oob-icon {
+  font-weight: 700;
+  color: var(--c-inaccuracy);
+}
+
+/* Candidate Moves Table */
+.candidates-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.candidates-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--roast);
+  background: rgba(166, 123, 91, 0.08);
+  border-bottom: 1px solid var(--border-muted);
+  flex-shrink: 0;
+}
+
+.cand-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+}
+
+.cand-dot-w, .cand-dot-d, .cand-dot-b {
+  width: 8px;
+  height: 8px;
+  display: inline-block;
+  border-radius: 1px;
+}
+
+.cand-dot-w { background: var(--c-win); border: 1px solid var(--espresso); }
+.cand-dot-d { background: var(--c-draw); }
+.cand-dot-b { background: var(--c-loss); }
+
+.candidates-scroll {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.candidates-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.candidates-table th {
+  padding: 5px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--roast);
+  text-align: left;
+  border-bottom: 1px solid var(--espresso);
+  background: #FFFDF9;
+}
+
+.th-move { width: 55px; }
+.th-games { width: 65px; text-align: right !important; }
+.th-bar { width: 140px; }
+
+.cand-row {
+  cursor: pointer;
+  border-bottom: 1px dashed var(--border-muted);
+  transition: background 0.12s ease;
+}
+
+.cand-row:hover {
+  background: rgba(192, 133, 82, 0.18);
+}
+
+.cand-row td {
+  padding: 6px 8px;
+  font-size: 12px;
+  vertical-align: middle;
+}
+
+.cand-move-san {
+  font-weight: 700;
+  color: var(--espresso);
+}
+
+.cand-games-count {
+  text-align: right;
+  color: var(--roast);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+}
+
+/* Stacked Win/Draw/Loss Results Bar */
+.cand-bar-container {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cand-bar-track {
+  height: 12px;
+  display: flex;
+  border: 1px solid var(--espresso);
+  border-radius: 1px;
+  overflow: hidden;
+  background: var(--espresso);
+}
+
+.cand-bar-seg {
+  height: 100%;
+  transition: width 0.25s ease;
+}
+
+.seg-white { background: var(--c-win); }
+.seg-draw  { background: var(--c-draw); }
+.seg-black { background: var(--c-loss); }
+
+.cand-bar-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+  color: var(--roast);
 }
 
 /* Info Cards */

@@ -1,44 +1,51 @@
 /* ============================================================
-   Blunderless — app.js (v5 Refactored)
-   - High piece-to-square contrast (charcoal-espresso black pieces with drop-shadow)
-   - Zero-click quick import & drag-and-drop .pgn file parsing
-   - Board utility rail: Flip, Sound toggle, Coordinate toggle
-   - MultiPV engine lines display with expand/collapse
-   - Move categorization summary: Accuracy %, 4-col badge grid,
-     clickable filtering, inline pills, centipawn loss & square badges
-   - Arrow key navigation & aligned responsive 1:1 chessboard sizing
+   Blunderless — app.js (v6 Refactored)
+   - Staunton vector SVGs (viewBox 0 0 45 45, geometricPrecision)
+     White: #FAF6F0 fill, #2B1A12 stroke
+     Black: #22150E fill, #D8C8B8 interior detail strokes (no thick white outer sticker)
+   - Loud creamy/clacky mechanical keyboard ASMR Web Audio engine
+     DynamicsCompressorNode + GainNode + 3-layer synthesis (thock, clack, snap, jitter)
+   - Live Lichess Opening Explorer (Masters / Lichess database toggle)
+     Debounced, cached by FEN, candidate moves table with win/draw/loss % bars,
+     interactive candidate clicking, out-of-book detection & return-to-book button.
    ============================================================ */
 
 'use strict';
 
-// ── Clean Coffee SVG Piece Set (Charcoal-Espresso Black Pieces #1B130F) ──
+// ── High-Precision Staunton Vector Pieces (No Thick White Stickers) ──
 const PIECE_SVGS = (() => {
   const W_FILL = '#FAF6F0';
-  const W_STRK = '#3B2314';
-  const B_FILL = '#1B130F'; // Deep charcoal-espresso for maximum contrast
-  const B_LINE = '#FAF6F0'; // Crisp parchment inner detailing
+  const W_STRK = '#2B1A12';
+  const B_FILL = '#22150E'; // Deep roasted espresso
+  const B_LINE = '#D8C8B8'; // Warm subtle cream interior detailing
 
   const makeSvg = (inner) =>
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 45 45">${inner}</svg>`;
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 45 45" shape-rendering="geometricPrecision">${inner}</svg>`;
 
   const pieces = {
-    wP: makeSvg(`<path d="M22.5 9c-2.21 0-4 1.79-4 4 0 .89.29 1.71.78 2.38C17.33 16.5 16 18.59 16 21c0 2.03.94 3.84 2.41 5.03-3 1.06-7.41 5.55-7.41 13.47h23c0-7.92-4.41-12.41-7.41-13.47 1.47-1.19 2.41-3 2.41-5.03 0-2.41-1.33-4.5-3.28-5.62.49-.67.78-1.49.78-2.38 0-2.21-1.79-4-4-4z" fill="${W_FILL}" stroke="${W_STRK}" stroke-width="2.2" stroke-linecap="round"/>`),
-    bP: makeSvg(`<path d="M22.5 9c-2.21 0-4 1.79-4 4 0 .89.29 1.71.78 2.38C17.33 16.5 16 18.59 16 21c0 2.03.94 3.84 2.41 5.03-3 1.06-7.41 5.55-7.41 13.47h23c0-7.92-4.41-12.41-7.41-13.47 1.47-1.19 2.41-3 2.41-5.03 0-2.41-1.33-4.5-3.28-5.62.49-.67.78-1.49.78-2.38 0-2.21-1.79-4-4-4z" fill="${B_FILL}" stroke="${B_LINE}" stroke-width="1.2"/>`),
+    // Pawn
+    wP: makeSvg(`<path d="M22.5 9c-2.21 0-4 1.79-4 4 0 .89.29 1.71.78 2.38C17.33 16.5 16 18.59 16 21c0 2.03.94 3.84 2.41 5.03-3 1.06-7.41 5.55-7.41 13.47h23c0-7.92-4.41-12.41-7.41-13.47 1.47-1.19 2.41-3 2.41-5.03 0-2.41-1.33-4.5-3.28-5.62.49-.67.78-1.49.78-2.38 0-2.21-1.79-4-4-4z" fill="${W_FILL}" stroke="${W_STRK}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>`),
+    bP: makeSvg(`<g fill="${B_FILL}" stroke="${B_FILL}" stroke-width="0.8"><path d="M22.5 9c-2.21 0-4 1.79-4 4 0 .89.29 1.71.78 2.38C17.33 16.5 16 18.59 16 21c0 2.03.94 3.84 2.41 5.03-3 1.06-7.41 5.55-7.41 13.47h23c0-7.92-4.41-12.41-7.41-13.47 1.47-1.19 2.41-3 2.41-5.03 0-2.41-1.33-4.5-3.28-5.62.49-.67.78-1.49.78-2.38 0-2.21-1.79-4-4-4z"/><circle cx="22.5" cy="13" r="2" fill="none" stroke="${B_LINE}" stroke-width="1.1"/><path d="M19.5 24.5c1.8-.8 4.2-.8 6 0" fill="none" stroke="${B_LINE}" stroke-width="1.1" stroke-linecap="round"/></g>`),
 
-    wR: makeSvg(`<g fill="${W_FILL}" stroke="${W_STRK}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 39h27v-3H9v3zM12 36v-4h21v4H12zM11 14V9h4v2h5V9h5v2h5V9h4v5"/><path d="M34 14l-3 3H14l-3-3"/><path d="M31 17v12.5H14V17"/><path d="M31 29.5l1.5 2.5h-20l1.5-2.5"/><path d="M11 14h23" fill="none"/></g>`),
-    bR: makeSvg(`<g fill="${B_FILL}" stroke="${B_LINE}" stroke-width="1.2" stroke-linejoin="round"><path d="M9 39h27v-3H9v3zM12.5 32l1.5-2.5h17l1.5 2.5h-20zM12 36v-4h21v4H12z"/><path d="M14 29.5v-13h17v13H14z"/><path d="M14 16.5L11 14h23l-3 2.5H14zM11 14V9h4v2h5V9h5v2h5V9h4v5H11z"/><path d="M12 35.5h21M13 31.5h19M14 29.5h17M14 16.5h17M11 14h23" fill="none" stroke="${B_LINE}" stroke-width="1.2"/></g>`),
+    // Rook
+    wR: makeSvg(`<g fill="${W_FILL}" stroke="${W_STRK}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 39h27v-3H9v3zM12 36v-4h21v4H12zM11 14V9h4v2h5V9h5v2h5V9h4v5"/><path d="M34 14l-3 3H14l-3-3"/><path d="M31 17v12.5H14V17"/><path d="M31 29.5l1.5 2.5h-20l1.5-2.5"/><path d="M11 14h23" fill="none"/></g>`),
+    bR: makeSvg(`<g fill="${B_FILL}" stroke="${B_FILL}" stroke-width="0.8" stroke-linejoin="round"><path d="M9 39h27v-3H9v3zM12.5 32l1.5-2.5h17l1.5 2.5h-20zM12 36v-4h21v4H12z"/><path d="M14 29.5v-13h17v13H14z"/><path d="M14 16.5L11 14h23l-3 2.5H14zM11 14V9h4v2h5V9h5v2h5V9h4v5H11z"/><path d="M12 35.5h21M13 31.5h19M14 29.5h17M14 16.5h17M11 14h23" fill="none" stroke="${B_LINE}" stroke-width="1.1" stroke-linecap="round"/></g>`),
 
-    wN: makeSvg(`<g fill="${W_FILL}" stroke="${W_STRK}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10c10.5 1 16.5 8 16 29H15c0-9 10-6.5 8-21"/><path d="M24 18c.38 2.91-5.55 7.37-8 9-3 2-2.82 4.34-5 4-1.042-.94 1.41-3.04 0-3-1 0 .19 1.23-1 2-1 0-4.003 1-4-4 0-2 6-12 6-12s1.89-1.9 2-3.5c-.73-.994-.5-2-.5-3 1-1 3 2.5 3 2.5h2s.78-1.992 2.5-3c1 0 1 3 1 3"/><circle cx="15" cy="14.5" r="1.2" fill="${W_STRK}" stroke="none"/></g>`),
-    bN: makeSvg(`<g fill="${B_FILL}" stroke="${B_LINE}" stroke-width="1.2" stroke-linejoin="round"><path d="M22 10c10.5 1 16.5 8 16 29H15c0-9 10-6.5 8-21"/><path d="M24 18c.38 2.91-5.55 7.37-8 9-3 2-2.82 4.34-5 4-1.042-.94 1.41-3.04 0-3-1 0 .19 1.23-1 2-1 0-4.003 1-4-4 0-2 6-12 6-12s1.89-1.9 2-3.5c-.73-.994-.5-2-.5-3 1-1 3 2.5 3 2.5h2s.78-1.992 2.5-3c1 0 1 3 1 3"/><circle cx="15" cy="14.5" r="1.3" fill="${B_LINE}" stroke="none"/></g>`),
+    // Knight
+    wN: makeSvg(`<g fill="${W_FILL}" stroke="${W_STRK}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10c10.5 1 16.5 8 16 29H15c0-9 10-6.5 8-21"/><path d="M24 18c.38 2.91-5.55 7.37-8 9-3 2-2.82 4.34-5 4-1.042-.94 1.41-3.04 0-3-1 0 .19 1.23-1 2-1 0-4.003 1-4-4 0-2 6-12 6-12s1.89-1.9 2-3.5c-.73-.994-.5-2-.5-3 1-1 3 2.5 3 2.5h2s.78-1.992 2.5-3c1 0 1 3 1 3"/><circle cx="15" cy="14.5" r="1.2" fill="${W_STRK}" stroke="none"/></g>`),
+    bN: makeSvg(`<g fill="${B_FILL}" stroke="${B_FILL}" stroke-width="0.8" stroke-linejoin="round"><path d="M22 10c10.5 1 16.5 8 16 29H15c0-9 10-6.5 8-21"/><path d="M24 18c.38 2.91-5.55 7.37-8 9-3 2-2.82 4.34-5 4-1.042-.94 1.41-3.04 0-3-1 0 .19 1.23-1 2-1 0-4.003 1-4-4 0-2 6-12 6-12s1.89-1.9 2-3.5c-.73-.994-.5-2-.5-3 1-1 3 2.5 3 2.5h2s.78-1.992 2.5-3c1 0 1 3 1 3"/><circle cx="15" cy="14.5" r="1.2" fill="${B_LINE}" stroke="none"/><path d="M24 18c.38 2.91-5.55 7.37-8 9M18 13.5c2 2 3.5 5 4 8" fill="none" stroke="${B_LINE}" stroke-width="1.1" stroke-linecap="round"/></g>`),
 
-    wB: makeSvg(`<g fill="${W_FILL}" stroke="${W_STRK}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 36c3.39-.97 10.11.43 13.5-2 3.39 2.43 10.11 1.03 13.5 2 0 0 1.65.54 3 2-.68.97-1.65.99-3 .5-3.39-.97-10.11.46-13.5-1-3.39 1.46-10.11.03-13.5 1-1.354.49-2.323.47-3-.5 1.354-1.94 3-2 3-2z"/><path d="M15 32c2.5 2.5 12.5 2.5 15 0 .5-1.5 0-2 0-2 0-2.5-2.5-4-2.5-4 5.5-1.5 6-11.5-5-15.5-11 4-10.5 14-5 15.5 0 0-2.5 1.5-2.5 4 0 0-.5.5 0 2z"/><circle cx="22.5" cy="8" r="2.5"/><path d="M17.5 26h10M15 30h15M22.5 15.5v5M20 18h5" fill="none"/></g>`),
-    bB: makeSvg(`<g fill="${B_FILL}" stroke="${B_LINE}" stroke-width="1.2" stroke-linejoin="round"><path d="M9 36c3.39-.97 10.11.43 13.5-2 3.39 2.43 10.11 1.03 13.5 2 0 0 1.65.54 3 2-.68.97-1.65.99-3 .5-3.39-.97-10.11.46-13.5-1-3.39 1.46-10.11.03-13.5 1-1.354.49-2.323.47-3-.5 1.354-1.94 3-2 3-2z"/><path d="M15 32c2.5 2.5 12.5 2.5 15 0 .5-1.5 0-2 0-2 0-2.5-2.5-4-2.5-4 5.5-1.5 6-11.5-5-15.5-11 4-10.5 14-5 15.5 0 0-2.5 1.5-2.5 4 0 0-.5.5 0 2z"/><circle cx="22.5" cy="8" r="2.5"/><path d="M17.5 26h10M15 30h15M22.5 15.5v5M20 18h5" fill="none" stroke="${B_LINE}" stroke-width="1.3" stroke-linecap="round"/></g>`),
+    // Bishop
+    wB: makeSvg(`<g fill="${W_FILL}" stroke="${W_STRK}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 36c3.39-.97 10.11.43 13.5-2 3.39 2.43 10.11 1.03 13.5 2 0 0 1.65.54 3 2-.68.97-1.65.99-3 .5-3.39-.97-10.11.46-13.5-1-3.39 1.46-10.11.03-13.5 1-1.354.49-2.323.47-3-.5 1.354-1.94 3-2 3-2z"/><path d="M15 32c2.5 2.5 12.5 2.5 15 0 .5-1.5 0-2 0-2 0-2.5-2.5-4-2.5-4 5.5-1.5 6-11.5-5-15.5-11 4-10.5 14-5 15.5 0 0-2.5 1.5-2.5 4 0 0-.5.5 0 2z"/><circle cx="22.5" cy="8" r="2.5"/><path d="M17.5 26h10M15 30h15M22.5 15.5v5M20 18h5" fill="none"/></g>`),
+    bB: makeSvg(`<g fill="${B_FILL}" stroke="${B_FILL}" stroke-width="0.8" stroke-linejoin="round"><path d="M9 36c3.39-.97 10.11.43 13.5-2 3.39 2.43 10.11 1.03 13.5 2 0 0 1.65.54 3 2-.68.97-1.65.99-3 .5-3.39-.97-10.11.46-13.5-1-3.39 1.46-10.11.03-13.5 1-1.354.49-2.323.47-3-.5 1.354-1.94 3-2 3-2z"/><path d="M15 32c2.5 2.5 12.5 2.5 15 0 .5-1.5 0-2 0-2 0-2.5-2.5-4-2.5-4 5.5-1.5 6-11.5-5-15.5-11 4-10.5 14-5 15.5 0 0-2.5 1.5-2.5 4 0 0-.5.5 0 2z"/><circle cx="22.5" cy="8" r="2.5"/><path d="M17.5 26h10M15 30h15M22.5 15.5v5M20 18h5" fill="none" stroke="${B_LINE}" stroke-width="1.1" stroke-linecap="round"/></g>`),
 
-    wQ: makeSvg(`<g fill="${W_FILL}" stroke="${W_STRK}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="12" r="2.2"/><circle cx="14" cy="9" r="2.2"/><circle cx="22.5" cy="8" r="2.2"/><circle cx="31" cy="9" r="2.2"/><circle cx="39" cy="12" r="2.2"/><path d="M9 26c8.5-1.5 21-1.5 27 0l2-12-7 11V11l-5.5 13.5-3-15-3 15-5.5-14V25L7 14l2 12z"/><path d="M9 26c0 2 1.5 2 2.5 4 1 1.5 1 1 .5 3.5-1.5 1-1.5 2.5-1.5 2.5-1.5 1.5.5 2.5.5 2.5 6.5 1 16.5 1 23 0 0 0 1.5-1 0-2.5 0 0 .5-1.5-1-2.5-.5-2.5-.5-2 .5-3.5 1-2 2.5-2 2.5-4-8.5-1.5-18.5-1.5-27 0z"/><path d="M11.5 30c3.5-1 18.5-1 22 0M12 33.5c6-1 15-1 21 0" fill="none"/></g>`),
-    bQ: makeSvg(`<g fill="${B_FILL}" stroke="${B_LINE}" stroke-width="1.2" stroke-linejoin="round"><circle cx="6" cy="12" r="2.2"/><circle cx="14" cy="9" r="2.2"/><circle cx="22.5" cy="8" r="2.2"/><circle cx="31" cy="9" r="2.2"/><circle cx="39" cy="12" r="2.2"/><path d="M9 26c8.5-1.5 21-1.5 27 0l2.5-12.5L31 25l-.3-14.1-5.2 13.6-3-14.5-3 14.5-5.2-13.6L14 25 6.5 13.5 9 26z"/><path d="M9 26c0 2 1.5 2 2.5 4 1 1.5 1 1 .5 3.5-1.5 1-1.5 2.5-1.5 2.5-1.5 1.5.5 2.5.5 2.5 6.5 1 16.5 1 23 0 0 0 1.5-1 0-2.5 0 0 .5-1.5-1-2.5-.5-2.5-.5-2 .5-3.5 1-2 2.5-2 2.5-4-8.5-1.5-18.5-1.5-27 0z"/><path d="M11.5 30c3.5-1 18.5-1 22 0M12 33.5c6-1 15-1 21 0" fill="none" stroke="${B_LINE}" stroke-width="1.3" stroke-linecap="round"/></g>`),
+    // Queen
+    wQ: makeSvg(`<g fill="${W_FILL}" stroke="${W_STRK}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="12" r="2.2"/><circle cx="14" cy="9" r="2.2"/><circle cx="22.5" cy="8" r="2.2"/><circle cx="31" cy="9" r="2.2"/><circle cx="39" cy="12" r="2.2"/><path d="M9 26c8.5-1.5 21-1.5 27 0l2-12-7 11V11l-5.5 13.5-3-15-3 15-5.5-14V25L7 14l2 12z"/><path d="M9 26c0 2 1.5 2 2.5 4 1 1.5 1 1 .5 3.5-1.5 1-1.5 2.5-1.5 2.5-1.5 1.5.5 2.5.5 2.5 6.5 1 16.5 1 23 0 0 0 1.5-1 0-2.5 0 0 .5-1.5-1-2.5-.5-2.5-.5-2 .5-3.5 1-2 2.5-2 2.5-4-8.5-1.5-18.5-1.5-27 0z"/><path d="M11.5 30c3.5-1 18.5-1 22 0M12 33.5c6-1 15-1 21 0" fill="none"/></g>`),
+    bQ: makeSvg(`<g fill="${B_FILL}" stroke="${B_FILL}" stroke-width="0.8" stroke-linejoin="round"><circle cx="6" cy="12" r="2.2"/><circle cx="14" cy="9" r="2.2"/><circle cx="22.5" cy="8" r="2.2"/><circle cx="31" cy="9" r="2.2"/><circle cx="39" cy="12" r="2.2"/><path d="M9 26c8.5-1.5 21-1.5 27 0l2.5-12.5L31 25l-.3-14.1-5.2 13.6-3-14.5-3 14.5-5.2-13.6L14 25 6.5 13.5 9 26z"/><path d="M9 26c0 2 1.5 2 2.5 4 1 1.5 1 1 .5 3.5-1.5 1-1.5 2.5-1.5 2.5-1.5 1.5.5 2.5.5 2.5 6.5 1 16.5 1 23 0 0 0 1.5-1 0-2.5 0 0 .5-1.5-1-2.5-.5-2.5-.5-2 .5-3.5 1-2 2.5-2 2.5-4-8.5-1.5-18.5-1.5-27 0z"/><path d="M11.5 30c3.5-1 18.5-1 22 0M12 33.5c6-1 15-1 21 0" fill="none" stroke="${B_LINE}" stroke-width="1.1" stroke-linecap="round"/></g>`),
 
-    wK: makeSvg(`<g fill="${W_FILL}" stroke="${W_STRK}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22.5 11.63V6M20 8h5" fill="none"/><path d="M22.5 25s4.5-7.5 3-10.5c0 0-1-2.5-3-2.5s-3 2.5-3 2.5c-1.5 3 3 10.5 3 10.5"/><path d="M11.5 37c5.5 3.5 15.5 3.5 21 0v-7s9-4.5 6-10.5c-4-6.5-13.5-3.5-16 4V27v-3.5c-3.5-7.5-13-10.5-16-4-3 6 5 10 5 10V37z"/><path d="M11.5 30c5.5-3 15.5-3 21 0m-21 3.5c5.5-3 15.5-3 21 0m-21 3.5c5.5-3 15.5-3 21 0" fill="none"/></g>`),
-    bK: makeSvg(`<g fill="${B_FILL}" stroke="${B_LINE}" stroke-width="1.2" stroke-linejoin="round"><path d="M22.5 11.63V6M20 8h5" fill="none" stroke="${B_LINE}" stroke-width="1.8" stroke-linecap="round"/><path d="M22.5 25s4.5-7.5 3-10.5c0 0-1-2.5-3-2.5s-3 2.5-3 2.5c-1.5 3 3 10.5 3 10.5"/><path d="M11.5 37c5.5 3.5 15.5 3.5 21 0v-7s9-4.5 6-10.5c-4-6.5-13.5-3.5-16 4V27v-3.5c-3.5-7.5-13-10.5-16-4-3 6 5 10 5 10V37z"/><path d="M11.5 30c5.5-3 15.5-3 21 0m-21 3.5c5.5-3 15.5-3 21 0m-21 3.5c5.5-3 15.5-3 21 0" fill="none" stroke="${B_LINE}" stroke-width="1.3" stroke-linecap="round"/></g>`),
+    // King
+    wK: makeSvg(`<g fill="${W_FILL}" stroke="${W_STRK}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M22.5 11.63V6M20 8h5" fill="none"/><path d="M22.5 25s4.5-7.5 3-10.5c0 0-1-2.5-3-2.5s-3 2.5-3 2.5c-1.5 3 3 10.5 3 10.5"/><path d="M11.5 37c5.5 3.5 15.5 3.5 21 0v-7s9-4.5 6-10.5c-4-6.5-13.5-3.5-16 4V27v-3.5c-3.5-7.5-13-10.5-16-4-3 6 5 10 5 10V37z"/><path d="M11.5 30c5.5-3 15.5-3 21 0m-21 3.5c5.5-3 15.5-3 21 0m-21 3.5c5.5-3 15.5-3 21 0" fill="none"/></g>`),
+    bK: makeSvg(`<g fill="${B_FILL}" stroke="${B_FILL}" stroke-width="0.8" stroke-linejoin="round"><path d="M22.5 11.63V6M20 8h5" fill="none" stroke="${B_LINE}" stroke-width="1.6" stroke-linecap="round"/><path d="M22.5 25s4.5-7.5 3-10.5c0 0-1-2.5-3-2.5s-3 2.5-3 2.5c-1.5 3 3 10.5 3 10.5"/><path d="M11.5 37c5.5 3.5 15.5 3.5 21 0v-7s9-4.5 6-10.5c-4-6.5-13.5-3.5-16 4V27v-3.5c-3.5-7.5-13-10.5-16-4-3 6 5 10 5 10V37z"/><path d="M11.5 30c5.5-3 15.5-3 21 0m-21 3.5c5.5-3 15.5-3 21 0m-21 3.5c5.5-3 15.5-3 21 0" fill="none" stroke="${B_LINE}" stroke-width="1.1" stroke-linecap="round"/></g>`),
   };
 
   const uris = {};
@@ -48,78 +55,170 @@ const PIECE_SVGS = (() => {
   return uris;
 })();
 
-// ── Pure Acoustic Mechanical Keyboard Clack Engine ───────────
-class SoundSystem {
+// ── Loud, Creamy/Clacky Mechanical Keyboard ASMR Audio Engine ─
+/**
+ * Procedural 3-layer mechanical switch synthesizer:
+ *  - Master compressor (-12dB, ratio 6) + gain (0.85)
+ *  - Layer 1 (Creamy Thock): 240Hz -> 85Hz sweep over 45ms through 420Hz LPF
+ *  - Layer 2 (Clacky Stem Impact): 18ms noise burst through 1850Hz BPF (Q 2.8)
+ *  - Layer 3 (Transient Snap): 6ms high-frequency impulse click at 3200Hz
+ *  - Pitch jitter (+-4%)
+ */
+class MechanicalAsmrEngine {
   constructor() {
     this._ctx = null;
+    this._masterGain = null;
+    this._compressor = null;
     this.enabled = true;
   }
 
-  _ctx_get() {
+  _init() {
     if (!this._ctx) {
-      this._ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      this._ctx = new AudioCtx();
+
+      // Dynamics compressor to let audio punch without clipping
+      this._compressor = this._ctx.createDynamicsCompressor();
+      this._compressor.threshold.setValueAtTime(-12, this._ctx.currentTime);
+      this._compressor.ratio.setValueAtTime(6, this._ctx.currentTime);
+      this._compressor.attack.setValueAtTime(0.003, this._ctx.currentTime);
+      this._compressor.release.setValueAtTime(0.05, this._ctx.currentTime);
+
+      // Loud master gain (0.85)
+      this._masterGain = this._ctx.createGain();
+      this._masterGain.gain.setValueAtTime(0.85, this._ctx.currentTime);
+
+      this._compressor.connect(this._masterGain);
+      this._masterGain.connect(this._ctx.destination);
     }
-    if (this._ctx.state === 'suspended') this._ctx.resume();
+    if (this._ctx.state === 'suspended') {
+      this._ctx.resume();
+    }
     return this._ctx;
   }
 
-  _noiseBurst(ctx, startTime, duration, freq, q, filterType, gainVal, decayPower = 4.0) {
+  /** Synthesise a single creamy/clacky switch impact */
+  _synthesizeClack(pitchMod = 1.0, vol = 1.0) {
     if (!this.enabled) return;
-    const bufSize = Math.max(1, Math.floor(ctx.sampleRate * duration));
-    const buffer = ctx.createBuffer(1, bufSize, ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-
-    for (let i = 0; i < bufSize; i++) {
-      const env = Math.pow(1 - i / bufSize, decayPower);
-      data[i] = (Math.random() * 2 - 1) * env;
-    }
-
-    const src = ctx.createBufferSource();
-    src.buffer = buffer;
-
-    const filter = ctx.createBiquadFilter();
-    filter.type = filterType;
-    filter.frequency.setValueAtTime(freq, startTime);
-    filter.Q.setValueAtTime(q, startTime);
-
-    const gain = ctx.createGain();
-    gain.gain.setValueAtTime(gainVal, startTime);
-    gain.gain.exponentialRampToValueAtTime(0.0008, startTime + duration);
-
-    src.connect(filter);
-    filter.connect(gain);
-    gain.connect(ctx.destination);
-    src.start(startTime);
-    src.stop(startTime + duration + 0.005);
-  }
-
-  _clack(clackHz = 1650, bodyHz = 340, vol = 0.75) {
-    if (!this.enabled) return;
-    const ctx = this._ctx_get();
+    const ctx = this._init();
     const now = ctx.currentTime;
-    const jitter = 0.94 + Math.random() * 0.12;
+    const jitter = (0.96 + Math.random() * 0.08) * pitchMod;
 
-    this._noiseBurst(ctx, now, 0.006, clackHz * jitter, 2.2, 'bandpass', vol * 0.85, 3.5);
-    this._noiseBurst(ctx, now + 0.001, 0.018, bodyHz * jitter, 1.8, 'bandpass', vol * 1.15, 3.0);
+    // ── Layer 1: Creamy Bottom-Out Thock (Triangle low sweep) ──
+    const osc = ctx.createOscillator();
+    const oscGain = ctx.createGain();
+    const oscFilter = ctx.createBiquadFilter();
+
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(240 * jitter, now);
+    osc.frequency.exponentialRampToValueAtTime(85 * jitter, now + 0.045);
+
+    oscFilter.type = 'lowpass';
+    oscFilter.frequency.setValueAtTime(420, now);
+
+    oscGain.gain.setValueAtTime(0.75 * vol, now);
+    oscGain.gain.exponentialRampToValueAtTime(0.001, now + 0.045);
+
+    osc.connect(oscFilter);
+    oscFilter.connect(oscGain);
+    oscGain.connect(this._compressor);
+
+    osc.start(now);
+    osc.stop(now + 0.046);
+
+    // ── Layer 2: Clacky Stem Impact (18ms noise burst) ──
+    const noiseBuf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 0.02), ctx.sampleRate);
+    const noiseData = noiseBuf.getChannelData(0);
+    for (let i = 0; i < noiseData.length; i++) {
+      const env = Math.pow(1 - i / noiseData.length, 3.2);
+      noiseData[i] = (Math.random() * 2 - 1) * env;
+    }
+    const noiseSrc = ctx.createBufferSource();
+    noiseSrc.buffer = noiseBuf;
+
+    const stemFilter = ctx.createBiquadFilter();
+    stemFilter.type = 'bandpass';
+    stemFilter.frequency.setValueAtTime(1850 * jitter, now);
+    stemFilter.Q.setValueAtTime(2.8, now);
+
+    const stemGain = ctx.createGain();
+    stemGain.gain.setValueAtTime(0.65 * vol, now);
+    stemGain.gain.exponentialRampToValueAtTime(0.001, now + 0.018);
+
+    noiseSrc.connect(stemFilter);
+    stemFilter.connect(stemGain);
+    stemGain.connect(this._compressor);
+
+    noiseSrc.start(now);
+    noiseSrc.stop(now + 0.02);
+
+    // ── Layer 3: Keycap Transient Snap (6ms high impulse) ──
+    const snapOsc = ctx.createOscillator();
+    const snapGain = ctx.createGain();
+    snapOsc.type = 'sine';
+    snapOsc.frequency.setValueAtTime(3200 * jitter, now);
+
+    snapGain.gain.setValueAtTime(0.4 * vol, now);
+    snapGain.gain.exponentialRampToValueAtTime(0.001, now + 0.006);
+
+    snapOsc.connect(snapGain);
+    snapGain.connect(this._compressor);
+
+    snapOsc.start(now);
+    snapOsc.stop(now + 0.007);
   }
 
-  move() { this._clack(1680, 350, 0.72); }
+  /** Soft muted chime for check & checkmate */
+  _chime(f1 = 520, f2 = 780, dur = 0.14) {
+    if (!this.enabled) return;
+    const ctx = this._init();
+    const now = ctx.currentTime;
+
+    [f1, f2].forEach((freq) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, now);
+      gain.gain.setValueAtTime(0.25, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + dur);
+      osc.connect(gain);
+      gain.connect(this._compressor);
+      osc.start(now);
+      osc.stop(now + dur + 0.01);
+    });
+  }
+
+  /** Normal Move */
+  move() {
+    this._synthesizeClack(1.0, 1.0);
+  }
+
+  /** Capture (x): Double-tap clack 28ms apart */
   capture() {
-    this._clack(2100, 440, 0.55);
-    setTimeout(() => this._clack(1420, 270, 0.92), 28);
+    this._synthesizeClack(1.08, 0.95);
+    setTimeout(() => this._synthesizeClack(0.92, 1.1), 28);
   }
+
+  /** Castling (O-O): Two rapid clacks 45ms apart */
   castle() {
-    this._clack(1780, 370, 0.65);
-    setTimeout(() => this._clack(1560, 320, 0.72), 62);
+    this._synthesizeClack(1.0, 0.9);
+    setTimeout(() => this._synthesizeClack(0.95, 0.95), 45);
   }
+
+  /** Check (+): Clack + soft dual chime */
   check() {
-    this._clack(2250, 480, 0.75);
-    setTimeout(() => this._clack(2450, 520, 0.65), 55);
+    this._synthesizeClack(1.15, 1.0);
+    this._chime(520, 780, 0.14);
   }
-  gameEnd() { this._clack(1150, 220, 1.0); }
+
+  /** Checkmate (#) / Game End: Deeper clack + resolving chime */
+  gameEnd() {
+    this._synthesizeClack(0.85, 1.2);
+    setTimeout(() => this._chime(390, 650, 0.22), 35);
+  }
 }
 
-const sounds = new SoundSystem();
+const sounds = new MechanicalAsmrEngine();
 
 // ── State ───────────────────────────────────────────────────
 const state = {
@@ -132,12 +231,21 @@ const state = {
   activeFilter: null,
   showCoords: true,
   engineLinesExpanded: true,
+  selectedDb: 'masters', // 'masters' or 'lichess'
+  lastKnownOpening: 'Starting Position',
+  lastKnownEco: '',
+  lastBookPly: 0,
+  isOutOfBook: false,
   headers: {
     white: 'White', black: 'Black',
     white_elo: '', black_elo: '',
     initial_clock: '--:--',
   },
 };
+
+// ── Cache & Debounce for Live Opening Explorer ───────────────
+const openingCache = new Map();
+let _openingDebounceTimer = null;
 
 // ── DOM Helpers ─────────────────────────────────────────────
 const $ = id => document.getElementById(id);
@@ -221,13 +329,176 @@ function updateEngineLines(score, bestMoveSan) {
     $('pv1-moves').textContent = '1. e4 e5 2. Nf3 Nc6 3. Bb5';
   }
 
-  // Variations 2 & 3
   if (s.type === 'cp') {
     const cp2 = s.value - 12;
     const cp3 = s.value - 24;
     $('pv2-score').textContent = (cp2 >= 0 ? `+${(cp2 / 100).toFixed(2)}` : `${(cp2 / 100).toFixed(2)}`);
     $('pv3-score').textContent = (cp3 >= 0 ? `+${(cp3 / 100).toFixed(2)}` : `${(cp3 / 100).toFixed(2)}`);
   }
+}
+
+// ── Live Opening Explorer (Lichess API) ──────────────────────
+async function fetchOpeningData(fen) {
+  const cacheKey = `${state.selectedDb}:${fen}`;
+  if (openingCache.has(cacheKey)) {
+    return openingCache.get(cacheKey);
+  }
+
+  const endpoint = state.selectedDb === 'masters'
+    ? `https://explorer.lichess.org/masters?fen=${encodeURIComponent(fen)}`
+    : `https://explorer.lichess.org/lichess?fen=${encodeURIComponent(fen)}`;
+
+  try {
+    const res = await fetch(endpoint);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    openingCache.set(cacheKey, data);
+    return data;
+  } catch (err) {
+    // If offline or failed, fallback to local lookup/graceful message
+    return null;
+  }
+}
+
+function updateOpeningDisplay(fen) {
+  clearTimeout(_openingDebounceTimer);
+  _openingDebounceTimer = setTimeout(async () => {
+    const data = await fetchOpeningData(fen);
+    renderOpeningData(data);
+  }, 300);
+}
+
+function renderOpeningData(data) {
+  const oobBanner = $('out-of-book-banner');
+  const candTable = $('candidates-table');
+  const candEmpty = $('candidates-empty');
+  const tbody = $('candidates-tbody');
+
+  if (!data || (!data.moves?.length && !data.opening)) {
+    // Out of book or offline
+    state.isOutOfBook = true;
+    oobBanner.classList.remove('hidden');
+    candTable.classList.add('hidden');
+    candEmpty.classList.remove('hidden');
+    $('opening-total-games').textContent = '0 theoretical games';
+
+    // Keep last known opening name in header
+    $('opening-hero-name').textContent = `${state.lastKnownOpening} (Theory ended)`;
+    $('opening-banner').textContent = state.lastKnownOpening;
+    return;
+  }
+
+  // Position is in book!
+  state.lastBookPly = state.plyIndex;
+  state.isOutOfBook = false;
+  oobBanner.classList.add('hidden');
+
+  if (data.opening) {
+    state.lastKnownOpening = data.opening.name;
+    state.lastKnownEco = data.opening.eco || '';
+  }
+
+  const openingTitle = state.lastKnownOpening || 'Starting Position';
+  const eco = state.lastKnownEco || '—';
+
+  // Subheader banner
+  $('opening-banner').textContent = openingTitle;
+  $('opening-eco-badge').textContent = eco !== '—' ? eco : '';
+
+  // Hero Card
+  $('opening-hero-name').textContent = openingTitle;
+  $('opening-hero-eco').textContent = eco;
+
+  // Games count calculation
+  const whiteWins = data.white || 0;
+  const draws = data.draws || 0;
+  const blackWins = data.black || 0;
+  const totalGames = whiteWins + draws + blackWins;
+  $('opening-total-games').textContent = `${totalGames.toLocaleString()} recorded games`;
+
+  // Best move
+  const bestCand = data.moves?.[0]?.san || '—';
+  $('opening-engine-best').textContent = `Top continuation: ${bestCand}`;
+
+  // Candidate moves table
+  if (!data.moves || data.moves.length === 0) {
+    candTable.classList.add('hidden');
+    candEmpty.classList.remove('hidden');
+    return;
+  }
+
+  candTable.classList.remove('hidden');
+  candEmpty.classList.add('hidden');
+  tbody.innerHTML = '';
+
+  for (const m of data.moves) {
+    const gCount = (m.white + m.draws + m.black) || 1;
+    const wPct = Math.round((m.white / gCount) * 100);
+    const dPct = Math.round((m.draws / gCount) * 100);
+    const bPct = Math.max(0, 100 - wPct - dPct);
+
+    const tr = document.createElement('tr');
+    tr.className = 'cand-row';
+    tr.innerHTML = `
+      <td class="cand-move-san">${m.san}</td>
+      <td class="cand-games-count">${gCount.toLocaleString()}</td>
+      <td class="cand-bar-container">
+        <div class="cand-bar-track">
+          <div class="cand-bar-seg seg-white" style="width: ${wPct}%" title="White wins: ${wPct}%"></div>
+          <div class="cand-bar-seg seg-draw" style="width: ${dPct}%" title="Draws: ${dPct}%"></div>
+          <div class="cand-bar-seg seg-black" style="width: ${bPct}%" title="Black wins: ${bPct}%"></div>
+        </div>
+        <div class="cand-bar-labels">
+          <span>${wPct}%</span>
+          <span>${dPct}%</span>
+          <span>${bPct}%</span>
+        </div>
+      </td>
+    `;
+
+    // Interactive candidate clicking: plays the theoretical continuation immediately
+    tr.addEventListener('click', () => {
+      playInteractiveMove(m.san);
+    });
+
+    tbody.appendChild(tr);
+  }
+}
+
+function playInteractiveMove(san) {
+  const tmpGame = new Chess();
+  if (state.initialFen) tmpGame.load(state.initialFen);
+  for (let i = 0; i < state.plyIndex; i++) {
+    tmpGame.move(state.moves[i].san);
+  }
+
+  const moveRes = tmpGame.move(san);
+  if (!moveRes) return;
+
+  const afterFen = tmpGame.fen();
+  const ply = state.plyIndex + 1;
+
+  // Append move into state if exploring past current game length
+  const syntheticMove = {
+    ply: ply,
+    move_number: Math.floor((ply + 1) / 2),
+    color: moveRes.color === 'w' ? 'white' : 'black',
+    uci: moveRes.from + moveRes.to + (moveRes.promotion || ''),
+    san: moveRes.san,
+    fen: afterFen,
+    clock: '--:--',
+    eval_after: { type: 'cp', value: 15 },
+    eval_change: 0,
+    classification: 'best',
+    best_move_san: san,
+  };
+
+  // Truncate future moves if we branch from mid-game
+  state.moves = state.moves.slice(0, state.plyIndex);
+  state.moves.push(syntheticMove);
+
+  renderMoveList(state.moves);
+  goToPly(ply);
 }
 
 // ── Player Bars & Clocks ────────────────────────────────────
@@ -314,13 +585,11 @@ function initBoard() {
 let _lastHighlightSquares = [];
 
 function highlightLastMove(fromSq, toSq, classification) {
-  // Clear previous highlights
   _lastHighlightSquares.forEach(sq => {
     $('board').querySelectorAll(`[data-square="${sq}"]`).forEach(el => {
       el.classList.remove('highlight-last');
     });
   });
-  // Clear previous badge
   $('board').querySelectorAll('.square-badge').forEach(el => el.remove());
   _lastHighlightSquares = [];
 
@@ -333,7 +602,7 @@ function highlightLastMove(fromSq, toSq, classification) {
   });
   _lastHighlightSquares = [fromSq, toSq];
 
-  // Render circular classification badge on the destination square
+  // Render circular classification badge on destination square
   if (classification && classification !== 'good') {
     const toSquareEl = $('board').querySelector(`[data-square="${toSq}"]`);
     if (toSquareEl) {
@@ -361,21 +630,24 @@ function goToPly(ply) {
     tmpGame.move(state.moves[i].san);
   }
 
-  state.board.position(tmpGame.fen(), true);
+  const currentFen = tmpGame.fen();
+  state.board.position(currentFen, true);
 
   if (ply > 0) {
     const moveData = state.moves[ply - 1];
     const uci = moveData.uci;
     highlightLastMove(uci.slice(0, 2), uci.slice(2, 4), moveData.classification);
     if (ply > prevPly) playMoveSound(moveData, tmpGame);
-    $('opening-best').textContent = moveData.best_move_san || '—';
     updateEngineLines(moveData.eval_after, moveData.best_move_san);
   } else {
     highlightLastMove(null, null, null);
     updateEngineLines(state.initialEval, state.moves[0]?.best_move_san);
   }
 
-  const evalScore = ply === 0 ? state.initialEval : state.moves[ply - 1].eval_after;
+  // Update Live Opening Explorer & ECO pill
+  updateOpeningDisplay(currentFen);
+
+  const evalScore = ply === 0 ? state.initialEval : state.moves[ply - 1]?.eval_after;
   if (evalScore) setEvalBar(evalScore);
 
   syncPlayerBars(ply);
@@ -407,8 +679,6 @@ function calculateAccuracy(moves) {
   let bSum = 0, bCount = 0;
 
   for (const m of moves) {
-    // Standard Lichess/Chess.com win-percentage conversion model
-    // Acc = 103.1668 * exp(-0.04354 * cpl) - 3.1669
     const loss = Math.max(0, -m.eval_change);
     const moveAcc = Math.max(0, Math.min(100, 103.1668 * Math.exp(-0.04354 * (loss / 10)) - 3.1669));
 
@@ -441,7 +711,6 @@ function renderMoveList(movesData) {
   $('cnt-mistake').textContent = counts.mistake;
   $('cnt-blunder').textContent = counts.blunder;
 
-  // Calculate and display accuracy
   const acc = calculateAccuracy(movesData);
   if (acc.white) {
     $('acc-white-val').textContent = `${acc.white}%`;
@@ -510,7 +779,6 @@ function renderMoveList(movesData) {
 function filterMovesByClassification(clf) {
   const buttons = document.querySelectorAll('.clf-badge-btn');
   if (state.activeFilter === clf) {
-    // Clear filter
     state.activeFilter = null;
     buttons.forEach(b => b.classList.remove('filter-active'));
     document.querySelectorAll('.move-cell').forEach(c => c.style.opacity = '1');
@@ -520,7 +788,6 @@ function filterMovesByClassification(clf) {
   state.activeFilter = clf;
   buttons.forEach(b => b.classList.toggle('filter-active', b.dataset.clf === clf));
 
-  // Find first matching move and navigate to it
   let firstMatchPly = null;
   document.querySelectorAll('.move-cell').forEach(c => {
     const isMatch = c.dataset.clf === clf;
@@ -568,14 +835,12 @@ async function analyseFen(fen) {
   state.headers = { white: 'White', black: 'Black', white_elo: '', black_elo: '', initial_clock: '--:--' };
 
   engineMeta.textContent = `Stockfish · d${res.depth || 12}`;
-  $('opening-banner').textContent = 'Custom FEN Position';
-  $('opening-eco-badge').textContent = '';
-  $('opening-best').textContent = res.engine.best_move_san || '—';
-
   state.board.position(fen, true);
   setEvalBar(res.engine.score);
   updateEngineLines(res.engine.score, res.engine.best_move_san);
+  updateOpeningDisplay(fen);
   syncPlayerBars(0);
+
   moveTableBody.innerHTML = '';
   gameHeaders.classList.add('hidden');
   emptyMoves.textContent = `FEN loaded. Best move: ${res.engine.best_move_san || '—'}`;
@@ -604,13 +869,6 @@ async function analysePgn(pgn) {
     <div class="info-row"><span class="info-key">TIME CONTROL</span><span class="info-val">${res.headers.time_control || '—'}</span></div>
     <div class="info-row"><span class="info-key">RESULT</span><span class="info-val">${res.headers.result || '*'}</span></div>
   `;
-
-  const openingTitle = res.headers.opening || 'Starting Position';
-  $('opening-banner').textContent = openingTitle;
-  $('opening-eco-badge').textContent = res.headers.eco || '';
-  $('opening-eco').textContent = res.headers.eco || '—';
-  $('opening-name').textContent = openingTitle;
-  $('opening-best').textContent = res.moves[0]?.best_move_san || '—';
 
   renderMoveList(res.moves);
   emptyMoves.classList.add('hidden');
@@ -749,6 +1007,19 @@ function toggleEngineLines() {
   $('engine-toggle-arrow').textContent = state.engineLinesExpanded ? '▾' : '▸';
 }
 
+function switchDatabase(db) {
+  state.selectedDb = db;
+  $('db-btn-masters').classList.toggle('active', db === 'masters');
+  $('db-btn-lichess').classList.toggle('active', db === 'lichess');
+
+  const tmpGame = new Chess();
+  if (state.initialFen) tmpGame.load(state.initialFen);
+  for (let i = 0; i < state.plyIndex; i++) {
+    tmpGame.move(state.moves[i].san);
+  }
+  updateOpeningDisplay(tmpGame.fen());
+}
+
 // ── Drag & Drop PGN Setup ───────────────────────────────────
 function setupDragAndDrop() {
   const dropzone = $('import-dropzone');
@@ -792,6 +1063,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setEvalBar(state.initialEval);
   syncPlayerBars(0);
   updateEngineLines(state.initialEval, 'e4');
+  updateOpeningDisplay('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1');
 
   // Playback Navigation
   $('btn-start').addEventListener('click', () => goToPly(0));
@@ -803,6 +1075,15 @@ document.addEventListener('DOMContentLoaded', () => {
   $('btn-rail-flip').addEventListener('click', flipBoard);
   $('btn-rail-sound').addEventListener('click', toggleSound);
   $('btn-rail-coords').addEventListener('click', toggleCoordinates);
+
+  // Return to last book move button
+  $('btn-return-book').addEventListener('click', () => {
+    goToPly(state.lastBookPly);
+  });
+
+  // Database Toggle (Masters vs Lichess)
+  $('db-btn-masters').addEventListener('click', () => switchDatabase('masters'));
+  $('db-btn-lichess').addEventListener('click', () => switchDatabase('lichess'));
 
   // Engine Lines Collapse Toggle
   $('btn-engine-toggle').addEventListener('click', toggleEngineLines);
