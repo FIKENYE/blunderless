@@ -243,14 +243,25 @@ body {
   height: calc(100vh - var(--topbar-h));
 }
 
-/* ── Left Stage: Clean Centered Assembly ── */
+/* ── Left Stage: Floating Knight Coach + Centered Board Assembly ── */
 .left-stage {
   display: flex;
+  flex-direction: row;
   align-items: center;
   justify-content: center;
-  padding: 16px 28px;
+  gap: 24px;
+  padding: 16px 24px;
   overflow: hidden;
   background: var(--canvas);
+  position: relative;
+}
+
+@media (max-width: 1219px) {
+  .left-stage {
+    flex-direction: column;
+    gap: 10px;
+    padding: 10px 16px;
+  }
 }
 
 .board-container {
@@ -1727,6 +1738,294 @@ body {
 .result-win { color: var(--c-best); font-weight: 700; }
 .result-loss { color: var(--c-blunder); font-weight: 700; }
 .result-draw { color: var(--roast); font-weight: 700; }
+
+/* ── Floating Geometric Pixel-Art Knight Mascot & Typewriter Bubble ── */
+.knight-coach-stage {
+  width: 224px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  z-index: 8;
+  transition: filter 0.65s ease;
+}
+
+.knight-coach-stage[data-state="depressed"] {
+  filter: grayscale(100%) brightness(0.85);
+}
+
+.knight-bubble {
+  width: 100%;
+  background: #FAF6F0;
+  border: 1px solid #22150E;
+  border-radius: 0;
+  box-shadow: 3px 3px 0 #22150E;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.knight-bubble-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  padding: 4px 7px;
+  background: rgba(166, 123, 91, 0.16);
+  border-bottom: 1px solid #22150E;
+}
+
+.knight-mood-label {
+  font-size: 9px;
+  font-weight: 700;
+  color: #22150E;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.knight-bubble-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.knight-mini-btn {
+  font-family: var(--font);
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 4px;
+  border: 1px solid #22150E;
+  background: #FAF6F0;
+  color: #22150E;
+  cursor: pointer;
+  line-height: 1.25;
+}
+
+.knight-mini-btn:hover {
+  background: #C86D3B;
+  color: #FAF6F0;
+}
+
+.knight-mini-btn.muted {
+  background: #22150E;
+  color: #FAF6F0;
+}
+
+.knight-speech-text {
+  font-size: 11px;
+  line-height: 1.45;
+  color: #22150E;
+  padding: 8px 9px;
+  min-height: 62px;
+  max-height: 112px;
+  overflow-y: auto;
+  word-break: break-word;
+}
+
+.knight-cursor {
+  display: inline-block;
+  margin-left: 1px;
+  color: #C86D3B;
+  animation: cursorBlink 0.7s steps(2, start) infinite;
+}
+
+@keyframes cursorBlink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+
+/* Crisp pixel pointer tail aimed down at the Knight */
+.knight-bubble-tail {
+  position: absolute;
+  bottom: -9px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-top: 9px solid #22150E;
+}
+
+.knight-bubble-tail::after {
+  content: '';
+  position: absolute;
+  top: -10px;
+  left: -6px;
+  width: 0;
+  height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 7px solid #FAF6F0;
+}
+
+/* Floating Mascot Button */
+.knight-mascot-btn {
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  width: 128px;
+  height: 128px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: knightFloat 2.4s ease-in-out infinite;
+  outline: none;
+}
+
+.knight-pixel-svg {
+  width: 128px;
+  height: 128px;
+  image-rendering: pixelated;
+  display: block;
+  overflow: visible;
+}
+
+/* Continuous floating animation */
+@keyframes knightFloat {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-7px); }
+}
+
+/* Modular Expression Layer Visibility */
+.knight-pixel-svg .expr-layer {
+  display: none;
+}
+
+.knight-coach-stage[data-state="deadpan"] .expr-deadpan,
+.knight-coach-stage[data-state="brilliant_shock"] .expr-brilliant_shock,
+.knight-coach-stage[data-state="flabbergasted"] .expr-flabbergasted,
+.knight-coach-stage[data-state="manic_meltdown"] .expr-manic_meltdown,
+.knight-coach-stage[data-state="depressed"] .expr-depressed {
+  display: inline;
+}
+
+/* Ears: normal vs drooped in depressed */
+.knight-pixel-svg .ears-depressed {
+  display: none;
+}
+
+.knight-coach-stage[data-state="depressed"] .ears-normal {
+  display: none;
+}
+
+.knight-coach-stage[data-state="depressed"] .ears-depressed {
+  display: inline;
+}
+
+/* Pixel Blink (scaleY 0.1 for 100ms controlled by JS class) */
+#knight-eyes {
+  transform-box: fill-box;
+  transform-origin: center center;
+  transition: transform 0.04s steps(2);
+}
+
+.knight-blinking #knight-eyes {
+  transform: scaleY(0.1);
+}
+
+/* Pupil tracking + Eye-roll */
+#knight-pupils {
+  transition: transform 0.14s steps(2);
+}
+
+.knight-eyeroll #knight-pupils {
+  animation: pixelEyeRoll 0.42s steps(3) 1;
+}
+
+@keyframes pixelEyeRoll {
+  0% { transform: translate(0px, 0px); }
+  35% { transform: translate(0px, -1px); }
+  70% { transform: translate(1px, -1px); }
+  100% { transform: translate(0px, 0px); }
+}
+
+/* Expression-Switch Transitions */
+.knight-anim-pop {
+  animation: knightBrilliantPop 0.28s ease-out 1 !important;
+}
+
+@keyframes knightBrilliantPop {
+  0%   { transform: translateY(0) scale(1) rotate(0deg); }
+  30%  { transform: translateY(-12px) scale(1.06) rotate(-5deg); }
+  65%  { transform: translateY(-10px) scale(1.06) rotate(5deg); }
+  100% { transform: translateY(0) scale(1) rotate(0deg); }
+}
+
+.knight-anim-shake {
+  animation: knightPixelShake 0.4s steps(2) 1 !important;
+}
+
+@keyframes knightPixelShake {
+  0%, 100% { transform: translateX(0); }
+  14% { transform: translateX(-3px); }
+  28% { transform: translateX(3px); }
+  42% { transform: translateX(-3px); }
+  56% { transform: translateX(3px); }
+  70% { transform: translateX(-3px); }
+  84% { transform: translateX(3px); }
+}
+
+.knight-anim-slump {
+  animation: knightDepressedSlump 0.65s ease-out forwards !important;
+}
+
+@keyframes knightDepressedSlump {
+  0%   { transform: translateY(0) rotate(0deg); }
+  100% { transform: translateY(8px) rotate(-4deg); }
+}
+
+.knight-anim-snap {
+  animation: knightSnapUpright 0.16s ease-out 1 !important;
+}
+
+@keyframes knightSnapUpright {
+  0%   { transform: translateY(4px) rotate(-2deg); }
+  100% { transform: translateY(0) rotate(0deg); }
+}
+
+/* Sliding pixel tear in depressed state */
+.knight-coach-stage[data-state="depressed"] .tear-drop {
+  animation: pixelTearSlide 2.2s steps(5) infinite;
+}
+
+@keyframes pixelTearSlide {
+  0%   { transform: translateY(0px); opacity: 1; }
+  80%  { transform: translateY(5px); opacity: 1; }
+  100% { transform: translateY(6px); opacity: 0; }
+}
+
+/* Responsive compact layout on smaller screens */
+@media (max-width: 1219px) {
+  .knight-coach-stage {
+    width: 100%;
+    max-width: 560px;
+    flex-direction: row-reverse;
+    justify-content: center;
+    gap: 12px;
+  }
+
+  .knight-mascot-btn,
+  .knight-pixel-svg {
+    width: 76px;
+    height: 76px;
+  }
+
+  .knight-speech-text {
+    min-height: 36px;
+    max-height: 60px;
+    padding: 5px 8px;
+  }
+
+  .knight-bubble-tail {
+    display: none;
+  }
+}
 
 /* ── Sidebar Footer: Classification Card + CTA + Nav ── */
 .sidebar-footer {

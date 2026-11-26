@@ -575,10 +575,15 @@ function initBoard() {
     const stage = document.querySelector('.left-stage');
     if (!stage) return;
 
-    // Available space accounting for padding and player bars
-    const availH = stage.clientHeight - 130;
-    const availW = stage.clientWidth - 110;
-    const rawSize = Math.max(280, Math.min(availH, availW, 680));
+    const coachEl = $('knight-coach-stage');
+    const isDesktopSide = window.innerWidth >= 1220 && coachEl;
+    const coachReserveW = isDesktopSide ? Math.min(260, coachEl.offsetWidth + 24) : 0;
+    const coachReserveH = (!isDesktopSide && coachEl) ? coachEl.offsetHeight + 16 : 0;
+
+    // Available space accounting for padding, player bars, and floating knight coach
+    const availH = stage.clientHeight - 130 - coachReserveH;
+    const availW = stage.clientWidth - 110 - coachReserveW;
+    const rawSize = Math.max(260, Math.min(availH, availW, 680));
 
     // Snap to 8px multiple for pixel-crisp squares
     const snapped = Math.floor(rawSize / 8) * 8;
@@ -2114,6 +2119,34 @@ function updateCoachContext(fen, ply, moveData) {
     epl = 0;
   }
 
+  // Compute cumulative and consecutive blunders/misses up to this ply
+  let totalBlunders = 0;
+  let blunderStreak = 0;
+  let recentBlunders = 0;
+  const checkLimit = Math.min(ply, state.moves.length);
+  for (let i = 0; i < checkLimit; i++) {
+    const c = state.moves[i]?.classification;
+    const isBad = c === 'blunder' || c === 'miss';
+    if (isBad) {
+      totalBlunders++;
+      blunderStreak++;
+      if (i >= checkLimit - 4) recentBlunders++;
+    } else {
+      blunderStreak = 0;
+    }
+  }
+
+  const evalFlip =
+    epBefore !== null &&
+    epAfter !== null &&
+    Math.abs(epAfter - epBefore) >= 0.25 &&
+    ((epBefore >= 0.55 && epAfter <= 0.45) || (epBefore <= 0.45 && epAfter >= 0.55) || Math.abs(epAfter - epBefore) >= 0.30);
+
+  let destGrid = null;
+  if (moveData && moveData.uci && moveData.uci.length >= 4) {
+    destGrid = squareToGrid(moveData.uci.slice(2, 4));
+  }
+
   const payload = {
     fen,
     ply,
@@ -2122,10 +2155,18 @@ function updateCoachContext(fen, ply, moveData) {
     bestMoveUci: moveData ? moveData.best_move : state.initialBestMove,
     bestMoveSan: moveData ? moveData.best_move_san : state.initialBestMoveSan,
     classification: moveData ? moveData.classification : null,
+    evalAfter: moveData ? moveData.eval_after : state.initialEval,
+    evalChange: moveData ? moveData.eval_change : 0,
     epBefore,
     epAfter,
     epBest,
     epl,
+    totalBlunders,
+    blunderStreak,
+    recentBlunders,
+    evalFlip,
+    destGrid,
+    soundEnabled: sounds.enabled,
     topLines: state.topLines,
   };
 

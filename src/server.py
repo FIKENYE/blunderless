@@ -32,6 +32,7 @@ from src.engine import (
     reset_engine_hash,
 )
 from src.features import extract_features
+from src.explain import explain_position
 from src.openings import is_book_position, lookup_opening
 
 # In-memory cache for PGN analyses so re-running is instant and 100% deterministic
@@ -49,6 +50,17 @@ class FenRequest(BaseModel):
 class PgnRequest(BaseModel):
     pgn: str
     depth: int = Field(default=10, ge=1, le=20)
+
+
+class ExplainRequest(BaseModel):
+    fen_before: str
+    played_uci: Optional[str] = None
+    played_san: Optional[str] = None
+    classification: Optional[str] = None
+    eval_after: Optional[dict[str, Any]] = None
+    eval_change: Optional[int] = None
+    best_move: Optional[str] = None
+    best_move_san: Optional[str] = None
 
 
 @asynccontextmanager
@@ -377,6 +389,26 @@ def analyse_pgn_endpoint(payload: PgnRequest, request: Request) -> dict[str, Any
     eng = _get_app_engine(request)
     try:
         return parse_and_analyse_pgn(payload.pgn, depth=payload.depth, engine=eng)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/explain")
+def explain_endpoint(payload: ExplainRequest, request: Request) -> dict[str, Any]:
+    """Generate a grounded Chibi Horse Coach explanation for a move or position."""
+    eng = _get_app_engine(request)
+    try:
+        return explain_position(
+            fen_before=payload.fen_before,
+            played_uci=payload.played_uci,
+            played_san=payload.played_san,
+            classification=payload.classification,
+            eval_after=payload.eval_after,
+            eval_change=payload.eval_change,
+            best_move=payload.best_move,
+            best_move_san=payload.best_move_san,
+            engine=eng,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
