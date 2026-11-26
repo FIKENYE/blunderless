@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import secrets
 import sqlite3
 import time
@@ -19,7 +20,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator, Optional
 
-DB_PATH = Path("data") / "blunderless.db"
+DB_PATH = Path(os.environ.get("BLUNDERLESS_DB_PATH", str(Path("data") / "blunderless.db")))
 
 
 @contextmanager

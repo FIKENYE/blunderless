@@ -6,7 +6,10 @@ Wraps Stockfish via python-chess to provide clean, structured analysis
 """
 
 from contextlib import contextmanager
+import os
 from pathlib import Path
+import shutil
+import threading
 from typing import Any, Iterator, Optional
 
 import chess
@@ -14,12 +17,56 @@ import chess.engine
 
 DEFAULT_ENGINE_PATH = Path("engine") / "stockfish.exe"
 
+# Re-entrant lock serializes concurrent FastAPI worker threads sharing one Stockfish
+# UCI process while allowing nested calls (e.g. evaluate_move -> analyse_position).
+_ENGINE_LOCK = threading.RLock()
+
+
+def resolve_engine_path(path: Optional[str | Path] = None) -> Path:
+    """
+    Find the Stockfish binary across Windows and Linux deployments.
+
+    Priority:
+    1. Explicit non-default path passed by caller
+    2. `STOCKFISH_PATH` environment variable
+    3. Local repo binaries (`engine/stockfish.exe` or `engine/stockfish`)
+    4. System PATH (`shutil.which("stockfish")`) or standard Linux paths
+    """
+    candidates: list[Path] = []
+    if path is not None and Path(path) != DEFAULT_ENGINE_PATH:
+        candidates.append(Path(path))
+
+    env_path = os.environ.get("STOCKFISH_PATH", "").strip()
+    if env_path:
+        candidates.append(Path(env_path))
+
+    candidates.extend([
+        Path("engine") / "stockfish.exe",
+        Path("engine") / "stockfish",
+    ])
+
+    which_path = shutil.which("stockfish")
+    if which_path:
+        candidates.append(Path(which_path))
+
+    candidates.extend([
+        Path("/usr/games/stockfish"),
+        Path("/usr/bin/stockfish"),
+    ])
+
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+
+    raise FileNotFoundError(
+        "Stockfish binary not found. Place it in 'engine/stockfish.exe' (Windows), "
+        "install system 'stockfish' (Linux), or set STOCKFISH_PATH."
+    )
+
 
 def get_engine(path: str | Path = DEFAULT_ENGINE_PATH) -> chess.engine.SimpleEngine:
     """Start and return a deterministic single-threaded Stockfish UCI engine."""
-    engine_path = Path(path)
-    if not engine_path.exists():
-        raise FileNotFoundError(f"Stockfish binary not found at: {engine_path}")
+    engine_path = resolve_engine_path(path)
     eng = chess.engine.SimpleEngine.popen_uci(str(engine_path))
     try:
         opts: dict[str, Any] = {}
@@ -38,11 +85,12 @@ def reset_engine_hash(engine: Optional[chess.engine.SimpleEngine]) -> None:
     """Clear Stockfish's transposition table so repeated analyses are deterministic."""
     if engine is None:
         return
-    try:
-        if "Clear Hash" in engine.options:
-            engine.configure({"Clear Hash": True})
-    except Exception:
-        pass
+    with _ENGINE_LOCK:
+        try:
+            if "Clear Hash" in engine.options:
+                engine.configure({"Clear Hash": True})
+        except Exception:
+            pass
 
 
 @contextmanager
@@ -156,12 +204,13 @@ def analyse_position(
             "top_lines": [],
         }
 
-    with _engine_session(engine) as eng:
-        raw_lines = eng.analyse(
-            board,
-            chess.engine.Limit(depth=depth),
-            multipv=multipv,
-        )
+    with _ENGINE_LOCK:
+        with _engine_session(engine) as eng:
+            raw_lines = eng.analyse(
+                board,
+                chess.engine.Limit(depth=depth),
+                multipv=multipv,
+            )
 
     top_lines = []
     for idx, info in enumerate(raw_lines, start=1):

@@ -12,10 +12,13 @@ from src.auth import (
     get_google_config,
     verify_and_exchange_google_code,
 )
+from src.engine import resolve_engine_path
 from src.server import (
+    _is_https_request,
     auth_me_endpoint,
     google_login_redirect,
     google_oauth_callback,
+    health_endpoint,
 )
 
 
@@ -33,10 +36,17 @@ class _MockHttpResponse:
         return False
 
 
-def _make_request(scheme: str = "http", netloc: str = "127.0.0.1:8000", cookies: dict | None = None):
+def _make_request(
+    scheme: str = "http",
+    netloc: str = "127.0.0.1:8000",
+    cookies: dict | None = None,
+    headers: dict | None = None,
+):
     return SimpleNamespace(
         url=SimpleNamespace(scheme=scheme, netloc=netloc),
         cookies=cookies or {},
+        headers=headers or {},
+        app=SimpleNamespace(state=SimpleNamespace(engine=object())),
     )
 
 
@@ -106,6 +116,21 @@ class TestGoogleAuthFlow(unittest.TestCase):
             self.assertIn("accounts.google.com/o/oauth2/v2/auth", resp.headers["location"])
             set_cookie = resp.headers.get("set-cookie", "")
             self.assertIn(OAUTH_STATE_COOKIE, set_cookie)
+
+    def test_health_and_https_proxy_detection_and_engine_path(self):
+        http_req = _make_request(scheme="http", netloc="127.0.0.1:8000")
+        self.assertFalse(_is_https_request(http_req))
+        health = health_endpoint(http_req)
+        self.assertEqual(health["status"], "ok")
+        self.assertTrue(health["engine_ready"])
+
+        proxy_req = _make_request(
+            scheme="http",
+            netloc="internal:8000",
+            headers={"x-forwarded-proto": "https", "x-forwarded-host": "blunderless.onrender.com"},
+        )
+        self.assertTrue(_is_https_request(proxy_req))
+        self.assertTrue(resolve_engine_path().is_file())
 
 
 if __name__ == "__main__":

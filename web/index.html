@@ -4,7 +4,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Blunderless — Chess Analysis</title>
+  <title>Blunderless — Chess Analysis &amp; AI Coach</title>
+  <meta name="description" content="Link your Chess.com or Lichess account, find recurring mistakes, and get coaching grounded strictly in Stockfish analysis." />
+  <meta name="theme-color" content="#C86D3B" />
+  <meta property="og:title" content="Blunderless — Stop repeating the same blunders." />
+  <meta property="og:description" content="Link your Chess.com and Lichess accounts, track ELO, and get grounded Stockfish coaching with Chester. No hallucinated tactics." />
+  <meta property="og:type" content="website" />
+  <meta property="og:image" content="/static/assets/logo.jpg" />
   <link rel="icon" type="image/png" href="/static/assets/logo.png" />
 
   <!-- Departure Mono via Google Fonts -->
@@ -20,7 +26,7 @@
   <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
   <script src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"></script>
 
-  <link rel="stylesheet" href="/static/styles.css?v=27" />
+  <link rel="stylesheet" href="/static/styles.css?v=28" />
 </head>
 
 <body>
@@ -153,7 +159,7 @@
               rating, and get coaching grounded strictly in Stockfish analysis. No hallucinated tactics.
             </p>
             <div class="lp-hero-actions">
-              <button type="button" id="lp-hero-cta" class="lp-btn-primary">CONTINUE WITH GOOGLE</button>
+              <button type="button" id="lp-hero-cta" class="lp-btn-primary">CONNECT YOUR ACCOUNT</button>
               <button type="button" id="lp-hero-sample" class="lp-btn-link">Try a sample game →</button>
             </div>
           </div>
@@ -289,7 +295,7 @@
         <div class="lp-inner lp-dark-cta-inner">
           <h2 class="lp-dark-title">Your next game starts with<br />fewer blunders.</h2>
           <button type="button" id="lp-footer-cta" class="lp-btn-primary lp-btn-on-dark">
-            CONTINUE WITH GOOGLE
+            CONNECT YOUR ACCOUNT
           </button>
         </div>
       </section>
@@ -979,18 +985,16 @@
         <div class="modal-section">
           <div class="modal-section-title">1. BLUNDERLESS SIGN-IN</div>
           <div id="modal-signed-out">
-            <button id="modal-google-btn" class="btn btn-primary modal-full-btn">CONTINUE WITH GOOGLE</button>
-            <div id="modal-google-hint" class="modal-hint hidden">
-              <strong>Google OAuth setup required:</strong> set <code>GOOGLE_CLIENT_ID</code> and
-              <code>GOOGLE_CLIENT_SECRET</code> in your environment (or a local <code>.env</code> file),
-              and add this Authorized Redirect URI in Google Cloud Console:
-              <div class="modal-redirect-uri" id="modal-redirect-uri">http://127.0.0.1:8000/auth/google/callback</div>
-              Or sign in instantly with a local profile below:
+            <div id="modal-google-wrap" class="hidden">
+              <button id="modal-google-btn" class="btn btn-primary modal-full-btn">CONTINUE WITH GOOGLE</button>
+              <div class="modal-divider">OR QUICK PROFILE</div>
             </div>
-            <div class="modal-divider">OR LOCAL PROFILE</div>
             <div class="modal-inline-row">
-              <input id="modal-local-name" class="text-input" type="text" placeholder="Your display name..." />
-              <button id="modal-local-btn" class="btn btn-secondary btn-sm">SIGN IN</button>
+              <input id="modal-local-name" class="text-input" type="text" placeholder="Pick a display name..." />
+              <button id="modal-local-btn" class="btn btn-primary btn-sm">SIGN IN</button>
+            </div>
+            <div class="modal-sub-note">
+              Or jump straight in by linking your Chess.com or Lichess username below.
             </div>
           </div>
           <div id="modal-signed-in" class="hidden">
@@ -1038,7 +1042,7 @@
   <script src="/static/pieces.js?v=11"></script>
   <script src="/static/app.js?v=25"></script>
   <script src="/static/coach.js?v=26"></script>
-  <script src="/static/platform.js?v=27"></script>
+  <script src="/static/platform.js?v=28"></script>
 </body>
 
 </html>

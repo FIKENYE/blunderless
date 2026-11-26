@@ -3302,6 +3302,13 @@ body.landing-mode .topbar {
   user-select: all;
 }
 
+.modal-sub-note {
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--roast);
+  margin-top: 6px;
+}
+
 @media (max-width: 900px) {
   .lp-nav,
   .lp-hero-band,

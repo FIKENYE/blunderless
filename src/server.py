@@ -12,7 +12,9 @@ import hashlib
 import io
 import json
 import math
+import os
 from pathlib import Path
+import threading
 from typing import Any, Optional
 import urllib.parse
 import urllib.request
@@ -149,8 +151,46 @@ if WEB_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(WEB_DIR)), name="static")
 
 
+_APP_ENGINE_LOCK = threading.Lock()
+
+
 def _get_app_engine(request: Request) -> Optional[Any]:
-    return getattr(request.app.state, "engine", None)
+    """Return the shared Stockfish engine, auto-restarting it if the process died."""
+    eng = getattr(request.app.state, "engine", None)
+    if eng is None:
+        return None
+    # python-chess sets transport/returncode if the child process terminated
+    proc = getattr(getattr(eng, "protocol", None), "transport", None)
+    if proc is not None and proc.is_closing():
+        with _APP_ENGINE_LOCK:
+            try:
+                eng.quit()
+            except Exception:
+                pass
+            eng = get_engine()
+            request.app.state.engine = eng
+    return eng
+
+
+def _is_https_request(request: Request) -> bool:
+    """Detect HTTPS directly or behind reverse proxies (Render, Railway, Cloudflare)."""
+    headers = getattr(request, "headers", None)
+    if headers:
+        forwarded = headers.get("x-forwarded-proto", "").split(",")[0].strip().lower()
+        if forwarded == "https":
+            return True
+    return getattr(request.url, "scheme", "http") == "https"
+
+
+def _set_session_cookie(response: Response, token: str, request: Request) -> None:
+    response.set_cookie(
+        key=SESSION_COOKIE,
+        value=token,
+        httponly=True,
+        samesite="lax",
+        secure=_is_https_request(request),
+        max_age=30 * 86400,
+    )
 
 
 def _format_clock(seconds: Optional[float]) -> Optional[str]:
@@ -488,6 +528,17 @@ def parse_and_analyse_pgn(
     return result
 
 
+@app.get("/health")
+def health_endpoint(request: Request) -> dict[str, Any]:
+    """Health check endpoint for Render / Railway / Fly.io / uptime monitors."""
+    eng = getattr(request.app.state, "engine", None)
+    return {
+        "status": "ok",
+        "engine_ready": eng is not None,
+        "google_configured": is_google_configured(),
+    }
+
+
 @app.get("/")
 def index():
     """Serve the frontend HTML page."""
@@ -648,8 +699,15 @@ def _sync_single_account(user_id: int, platform: str, username: str, limit: int 
 # ── Auth Endpoints (Google OAuth + Local Profile) ────────────────────────────
 
 def _request_origin(request: Request) -> str:
-    """Return `scheme://host[:port]` for the current request so OAuth URIs match."""
-    return f"{request.url.scheme}://{request.url.netloc}"
+    """Return `scheme://host[:port]` respecting reverse-proxy headers."""
+    headers = getattr(request, "headers", None)
+    scheme = "https" if _is_https_request(request) else getattr(request.url, "scheme", "http")
+    host = (
+        headers.get("x-forwarded-host", "").split(",")[0].strip()
+        if headers
+        else ""
+    ) or getattr(request.url, "netloc", "127.0.0.1:8000")
+    return f"{scheme}://{host}"
 
 
 @app.get("/api/auth/me")
@@ -667,15 +725,9 @@ def auth_me_endpoint(request: Request) -> dict[str, Any]:
 
 
 @app.post("/api/auth/local")
-def auth_local_login_endpoint(payload: LocalLoginRequest, response: Response) -> dict[str, Any]:
+def auth_local_login_endpoint(payload: LocalLoginRequest, request: Request, response: Response) -> dict[str, Any]:
     user, token = login_local_profile(payload.display_name)
-    response.set_cookie(
-        key=SESSION_COOKIE,
-        value=token,
-        httponly=True,
-        samesite="lax",
-        max_age=30 * 86400,
-    )
+    _set_session_cookie(response, token, request)
     return {"user": user, "linked_accounts": get_linked_accounts(user["id"])}
 
 
@@ -701,6 +753,7 @@ def google_login_redirect(request: Request):
         value=oauth_state,
         httponly=True,
         samesite="lax",
+        secure=_is_https_request(request),
         max_age=600,
     )
     return resp
@@ -748,13 +801,7 @@ def google_oauth_callback(
 
     resp = RedirectResponse(url="/?auth=google_ok", status_code=302)
     resp.delete_cookie(OAUTH_STATE_COOKIE)
-    resp.set_cookie(
-        key=SESSION_COOKIE,
-        value=token,
-        httponly=True,
-        samesite="lax",
-        max_age=30 * 86400,
-    )
+    _set_session_cookie(resp, token, request)
     return resp
 
 
@@ -766,7 +813,7 @@ def link_account_endpoint(payload: LinkAccountRequest, request: Request, respons
     if not user:
         # Seamless UX: auto-create a local profile named after their linked chess handle
         user, token = login_local_profile(payload.username)
-        response.set_cookie(key=SESSION_COOKIE, value=token, httponly=True, samesite="lax", max_age=30 * 86400)
+        _set_session_cookie(response, token, request)
     try:
         res = _sync_single_account(user["id"], payload.platform, payload.username, limit=payload.sync_limit)
     except ValueError as exc:

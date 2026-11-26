@@ -205,12 +205,12 @@
           : 'Local Blunderless Profile';
     }
 
-    const gHint = $('modal-google-hint');
-    if (gHint) gHint.classList.toggle('hidden', Boolean(auth.google_configured));
-    const redirectEl = $('modal-redirect-uri');
-    if (redirectEl && auth.google_redirect_uri) {
-      redirectEl.textContent = auth.google_redirect_uri;
-    }
+    // Only show Google OAuth controls when configured on the server
+    const googleEnabled = Boolean(auth.google_configured);
+    $('modal-google-wrap')?.classList.toggle('hidden', !googleEnabled);
+    const primaryCtaLabel = googleEnabled ? 'CONTINUE WITH GOOGLE' : 'CONNECT YOUR ACCOUNT';
+    if ($('lp-hero-cta')) $('lp-hero-cta').textContent = primaryCtaLabel;
+    if ($('lp-footer-cta')) $('lp-footer-cta').textContent = primaryCtaLabel;
 
     const ccAcc = accounts.find((a) => a.platform === 'chesscom');
     const liAcc = accounts.find((a) => a.platform === 'lichess');
@@ -237,19 +237,40 @@
     $('account-modal')?.classList.add('hidden');
   }
 
+  function handlePrimaryLandingCta() {
+    if (pState.auth?.google_configured) {
+      window.location.href = '/auth/google/login';
+      return;
+    }
+    const connectEl = $('lp-connect');
+    const userInput = $('qc-username');
+    if (connectEl && !$('home-landing-flow')?.classList.contains('hidden')) {
+      connectEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setTimeout(() => userInput?.focus(), 260);
+      return;
+    }
+    openAccountModal();
+  }
+
   async function handleGoogleSignIn() {
     if (pState.auth?.google_configured) {
       window.location.href = '/auth/google/login';
       return;
     }
     openAccountModal();
-    $('modal-status').textContent =
-      'Set GOOGLE_CLIENT_ID & GOOGLE_CLIENT_SECRET env vars to enable Google OAuth, or use Local Profile right below!';
   }
 
-  async function handleLinkAccount(platform, username, statusEl) {
+  async function handleLinkAccount(platform, username, statusEl, triggerBtn = null) {
     const clean = (username || '').trim();
-    if (!clean) return;
+    if (!clean) {
+      if (statusEl) statusEl.textContent = 'Enter a Chess.com or Lichess username first.';
+      return;
+    }
+    const origLabel = triggerBtn ? triggerBtn.textContent : '';
+    if (triggerBtn) {
+      triggerBtn.disabled = true;
+      triggerBtn.textContent = 'SYNCING...';
+    }
     if (statusEl) statusEl.textContent = `Connecting ${platform === 'chesscom' ? 'Chess.com' : 'Lichess'} (${clean}) & syncing games...`;
     try {
       const res = await api('/api/accounts/link', 'POST', {
@@ -264,8 +285,14 @@
       await loadHomeDashboard();
       if (pState.view === 'games') loadGamesLibrary();
       if (pState.view === 'insights') loadSavedReportsList();
+      closeAccountModal();
     } catch (err) {
-      if (statusEl) statusEl.textContent = `Error: ${err.message}`;
+      if (statusEl) statusEl.textContent = `Could not connect: ${err.message}`;
+    } finally {
+      if (triggerBtn) {
+        triggerBtn.disabled = false;
+        triggerBtn.textContent = origLabel;
+      }
     }
   }
 
@@ -1082,8 +1109,8 @@
     $('lp-signin-btn')?.addEventListener('click', openAccountModal);
 
     // Landing Hero & Footer CTAs
-    $('lp-hero-cta')?.addEventListener('click', handleGoogleSignIn);
-    $('lp-footer-cta')?.addEventListener('click', handleGoogleSignIn);
+    $('lp-hero-cta')?.addEventListener('click', handlePrimaryLandingCta);
+    $('lp-footer-cta')?.addEventListener('click', handlePrimaryLandingCta);
     $('lp-hero-sample')?.addEventListener('click', () => {
       switchAppView('analyze');
       global.BlunderlessBoard?.loadSample();
@@ -1122,7 +1149,7 @@
     // Quick Connect Form
     $('lp-connect-form')?.addEventListener('submit', (e) => {
       e.preventDefault();
-      handleLinkAccount($('qc-platform').value, $('qc-username').value, $('qc-status'));
+      handleLinkAccount($('qc-platform').value, $('qc-username').value, $('qc-status'), $('qc-link-btn'));
     });
 
     // Home Dashboard controls
@@ -1178,10 +1205,10 @@
       await loadHomeDashboard();
     });
     $('modal-cc-link-btn')?.addEventListener('click', () => {
-      handleLinkAccount('chesscom', $('modal-cc-input').value, $('modal-status'));
+      handleLinkAccount('chesscom', $('modal-cc-input').value, $('modal-status'), $('modal-cc-link-btn'));
     });
     $('modal-li-link-btn')?.addEventListener('click', () => {
-      handleLinkAccount('lichess', $('modal-li-input').value, $('modal-status'));
+      handleLinkAccount('lichess', $('modal-li-input').value, $('modal-status'), $('modal-li-link-btn'));
     });
     $('modal-cc-unlink')?.addEventListener('click', async () => {
       await api('/api/accounts/chesscom', 'DELETE');
