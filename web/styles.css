@@ -360,6 +360,18 @@ body {
   box-shadow: 1px 1px 0 var(--espresso);
 }
 
+.eval-bar-shell.flipped {
+  flex-direction: column-reverse;
+}
+
+.eval-bar-shell.flipped .eval-score-top {
+  color: var(--espresso);
+}
+
+.eval-bar-shell.flipped .eval-score-bot {
+  color: #FAF6F0;
+}
+
 .eval-fill {
   width: 100%;
   transition: height 0.25s ease-out;
@@ -420,22 +432,35 @@ body {
   stroke-linejoin: miter;
 }
 
-.piece-inline-host {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  pointer-events: none !important;
-  position: relative;
-  z-index: 2;
+/* Custom retro-espresso scrollbars for sidebar panes */
+.move-list-scroll::-webkit-scrollbar,
+.candidates-scroll::-webkit-scrollbar,
+.games-list::-webkit-scrollbar,
+.tab-scroll-pad::-webkit-scrollbar {
+  width: 7px;
 }
 
-.piece-inline-host svg {
-  width: 92%;
-  height: 92%;
-  pointer-events: none !important;
-  filter: drop-shadow(0 2px 2px rgba(34, 21, 14, 0.25));
+.move-list-scroll::-webkit-scrollbar-track,
+.candidates-scroll::-webkit-scrollbar-track,
+.games-list::-webkit-scrollbar-track,
+.tab-scroll-pad::-webkit-scrollbar-track {
+  background: var(--canvas);
+  border-left: 1px solid var(--border-muted);
+}
+
+.move-list-scroll::-webkit-scrollbar-thumb,
+.candidates-scroll::-webkit-scrollbar-thumb,
+.games-list::-webkit-scrollbar-thumb,
+.tab-scroll-pad::-webkit-scrollbar-thumb {
+  background: var(--tan-dark);
+  border-radius: 1px;
+}
+
+.move-list-scroll::-webkit-scrollbar-thumb:hover,
+.candidates-scroll::-webkit-scrollbar-thumb:hover,
+.games-list::-webkit-scrollbar-thumb:hover,
+.tab-scroll-pad::-webkit-scrollbar-thumb:hover {
+  background: var(--espresso);
 }
 
 .user-sq-highlight {

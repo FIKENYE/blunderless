@@ -245,47 +245,68 @@ const CLF_META = {
   blunder: { glyph: '??', cls: 'glyph-blunder', badgeCls: 'clf-blunder', title: 'Blunder' },
 };
 
+// ── Shared Chess.js Position Builder ────────────────────────
+function buildGameAtPly(ply = state.plyIndex) {
+  const game = new Chess();
+  if (state.initialFen) game.load(state.initialFen);
+  const limit = Math.min(ply, state.moves.length);
+  for (let i = 0; i < limit; i++) {
+    game.move(state.moves[i].san);
+  }
+  return game;
+}
+
+function resetSummaryCard() {
+  state.activeFilter = null;
+  document.querySelectorAll('.clf-badge-btn').forEach(b => b.classList.remove('filter-active'));
+  $('cnt-best').textContent = '0';
+  $('cnt-inacc').textContent = '0';
+  $('cnt-mistake').textContent = '0';
+  $('cnt-blunder').textContent = '0';
+  $('acc-white-val').textContent = '—';
+  $('acc-black-val').textContent = '—';
+  $('acc-white-bar').style.width = '50%';
+}
+
 // ── Eval Bar & Engine Strip ─────────────────────────────────
 function setEvalBar(score) {
   let cp;
   let formatted;
+  let topText = '';
+  let botText = '';
 
   if (score.type === 'mate') {
     cp = score.value > 0 ? 10000 : -10000;
     const prefix = score.value > 0 ? '+' : '-';
     formatted = `${prefix}M${Math.abs(score.value)}`;
-    if (score.value > 0) {
-      evalLabelT.textContent = '';
-      evalLabelB.textContent = `M${Math.abs(score.value)}`;
-    } else {
-      evalLabelT.textContent = `M${Math.abs(score.value)}`;
-      evalLabelB.textContent = '';
-    }
+    if (score.value > 0) botText = `M${Math.abs(score.value)}`;
+    else topText = `M${Math.abs(score.value)}`;
   } else {
     cp = score.value;
     const disp = (Math.abs(cp) / 100).toFixed(1);
     const disp2 = (Math.abs(cp) / 100).toFixed(2);
     if (cp >= 0) {
       formatted = '+' + disp2;
-      evalLabelT.textContent = '';
-      evalLabelB.textContent = '+' + disp;
+      botText = '+' + disp;
     } else {
       formatted = '-' + disp2;
-      evalLabelT.textContent = '-' + disp;
-      evalLabelB.textContent = '';
+      topText = '-' + disp;
     }
   }
 
   engineEval.textContent = formatted;
 
   const pct = Math.round(50 + 50 * Math.tanh(cp / 350));
-  if (state.orientation === 'white') {
-    evalBlackFill.style.height = (100 - pct) + '%';
-    evalWhiteFill.style.height = pct + '%';
-  } else {
-    evalBlackFill.style.height = pct + '%';
-    evalWhiteFill.style.height = (100 - pct) + '%';
-  }
+  evalBlackFill.style.height = (100 - pct) + '%';
+  evalWhiteFill.style.height = pct + '%';
+
+  const evalShell = $('eval-bar-shell');
+  const isFlipped = state.orientation === 'black';
+  evalShell.classList.toggle('flipped', isFlipped);
+
+  // When flipped, White's fill is at the top and Black's fill is at the bottom
+  evalLabelT.textContent = isFlipped ? botText : topText;
+  evalLabelB.textContent = isFlipped ? topText : botText;
 }
 
 // ── MultiPV Engine Lines Update ──────────────────────────────
@@ -437,11 +458,7 @@ function renderOpeningData(data) {
 }
 
 function playInteractiveMove(san) {
-  const tmpGame = new Chess();
-  if (state.initialFen) tmpGame.load(state.initialFen);
-  for (let i = 0; i < state.plyIndex; i++) {
-    tmpGame.move(state.moves[i].san);
-  }
+  const tmpGame = buildGameAtPly(state.plyIndex);
 
   const moveRes = tmpGame.move(san);
   if (!moveRes) return;
@@ -874,11 +891,7 @@ function goToPly(ply) {
     clearAnnotations();
   }
 
-  const tmpGame = new Chess();
-  if (state.initialFen) tmpGame.load(state.initialFen);
-  for (let i = 0; i < ply; i++) {
-    tmpGame.move(state.moves[i].san);
-  }
+  const tmpGame = buildGameAtPly(ply);
 
   const currentFen = tmpGame.fen();
   state.board.position(currentFen, true);
@@ -961,6 +974,7 @@ function renderMoveList(movesData) {
   moveTableBody.innerHTML = '';
   emptyMoves.classList.add('hidden');
   quickImportPanel.classList.add('hidden');
+  resetSummaryCard();
 
   const counts = { best: 0, inaccuracy: 0, mistake: 0, blunder: 0 };
   for (const m of movesData) {
@@ -1095,6 +1109,9 @@ async function analyseFen(fen) {
   state.topLines = res.engine.top_lines || [];
   state.moves = [];
   state.plyIndex = 0;
+  state.lastKnownOpening = 'Custom FEN Position';
+  state.lastKnownEco = '';
+  state.lastBookPly = 0;
   state.headers = { white: 'White', black: 'Black', white_elo: '', black_elo: '', initial_clock: '--:--' };
 
   engineMeta.textContent = `Stockfish · d${res.depth || 12}`;
@@ -1103,6 +1120,7 @@ async function analyseFen(fen) {
   updateEngineLines(res.engine.score, res.engine.best_move_san);
   updateOpeningDisplay(fen);
   syncPlayerBars(0);
+  resetSummaryCard();
   updateBestMoveUI();
   renderBoardArrows();
   updateCoachContext(fen, 0, null);
@@ -1127,6 +1145,9 @@ async function analysePgn(pgn) {
   state.topLines = [];
   state.moves = res.moves;
   state.plyIndex = 0;
+  state.lastKnownOpening = res.headers.opening || 'Starting Position';
+  state.lastKnownEco = res.headers.eco || '';
+  state.lastBookPly = 0;
   state.headers = res.headers;
 
   engineMeta.textContent = `Stockfish · d${res.depth || 10}`;
@@ -1335,10 +1356,14 @@ function updateBestMoveUI() {
 
   if (!state.showBestMove) {
     strip.classList.add('hidden');
+    if (previewBtn) previewBtn.textContent = 'Preview Move';
     return;
   }
 
   strip.classList.remove('hidden');
+  if (previewBtn) {
+    previewBtn.textContent = state.isPreviewingBest ? 'Restore Move' : 'Preview Move';
+  }
 
   if (state.plyIndex === 0) {
     const bestSan = state.initialBestMoveSan || state.moves[0]?.best_move_san;
@@ -1388,25 +1413,21 @@ function toggleBestMove() {
   updateBestMoveUI();
   renderBoardArrows();
 
-  const tmpGame = new Chess();
-  if (state.initialFen) tmpGame.load(state.initialFen);
-  for (let i = 0; i < state.plyIndex; i++) {
-    tmpGame.move(state.moves[i].san);
-  }
+  const tmpGame = buildGameAtPly(state.plyIndex);
   const moveData = state.plyIndex > 0 ? state.moves[state.plyIndex - 1] : null;
   updateCoachContext(tmpGame.fen(), state.plyIndex, moveData);
 }
 
 function previewBestMove() {
+  if (state.isPreviewingBest) {
+    goToPly(state.plyIndex);
+    return;
+  }
+
   const bestUci = getBestMoveForCurrentPly();
   if (!bestUci || bestUci.length < 4) return;
 
-  const tmpGame = new Chess();
-  if (state.initialFen) tmpGame.load(state.initialFen);
-  const stepsBefore = Math.max(0, state.plyIndex - 1);
-  for (let i = 0; i < stepsBefore; i++) {
-    tmpGame.move(state.moves[i].san);
-  }
+  const tmpGame = buildGameAtPly(Math.max(0, state.plyIndex - 1));
 
   const moveObj = tmpGame.move({
     from: bestUci.slice(0, 2),
@@ -1419,6 +1440,7 @@ function previewBestMove() {
   state.board.position(tmpGame.fen(), true);
   highlightLastMove(moveObj.from, moveObj.to, 'best');
   sounds.move();
+  updateBestMoveUI();
   renderBoardArrows();
 }
 
@@ -1486,12 +1508,7 @@ function switchDatabase(db) {
   $('db-btn-masters').classList.toggle('active', db === 'masters');
   $('db-btn-lichess').classList.toggle('active', db === 'lichess');
 
-  const tmpGame = new Chess();
-  if (state.initialFen) tmpGame.load(state.initialFen);
-  for (let i = 0; i < state.plyIndex; i++) {
-    tmpGame.move(state.moves[i].san);
-  }
-  updateOpeningDisplay(tmpGame.fen());
+  updateOpeningDisplay(buildGameAtPly(state.plyIndex).fen());
 }
 
 // ── Drag & Drop PGN Setup ───────────────────────────────────
