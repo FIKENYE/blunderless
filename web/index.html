@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Blunderless</title>
+  <title>Blunderless — Chess Analysis</title>
 
   <!-- Departure Mono via Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -19,60 +19,86 @@
   <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
   <script src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"></script>
 
-  <link rel="stylesheet" href="/static/styles.css?v=4" />
+  <link rel="stylesheet" href="/static/styles.css?v=6" />
 </head>
 
 <body>
   <header class="topbar">
-    <span class="logo">BLUNDERLESS</span>
+    <div class="brand-frame">
+      <span class="brand-glyph">♞</span>
+      <span class="logo">BLUNDERLESS</span>
+      <span class="brand-tag">v2.1</span>
+    </div>
     <div class="topbar-controls">
-      <input id="chesscom-input" class="text-input" type="text" placeholder="chess.com username" autocomplete="off" />
-      <button id="chesscom-btn" class="btn btn-secondary">LOAD GAMES</button>
+      <div class="quick-user-box">
+        <input id="chesscom-input" class="text-input" type="text" placeholder="chess.com username" autocomplete="off" />
+        <button id="chesscom-btn" class="btn btn-secondary" title="Fetch last 5 games from Chess.com">FETCH GAMES</button>
+      </div>
     </div>
   </header>
 
   <main class="workspace">
 
-    <!-- ══ Left Stage: Centered Board + Eval Bar + Aligned Player Bars ══ -->
+    <!-- ══ Left Stage: Centered Board + Eval Bar + Aligned Player Bars + Utility Rail ══ -->
     <section class="left-stage">
-      <div class="board-stack">
+      <div class="board-container">
+        
+        <!-- Eval Bar: spans exact height of the 8 ranks, flush to the left of the board -->
+        <aside class="eval-bar-shell" id="eval-bar-shell" aria-label="Evaluation bar">
+          <div id="eval-black-fill" class="eval-fill eval-fill-black" style="height: 50%"></div>
+          <div id="eval-white-fill" class="eval-fill eval-fill-white" style="height: 50%"></div>
+          <span id="eval-label-top" class="eval-score eval-score-top"></span>
+          <span id="eval-label-bot" class="eval-score eval-score-bot">+0.2</span>
+        </aside>
 
-        <!-- Top Player Bar (aligned to board left & right edges) -->
-        <div class="player-bar" id="top-player-bar">
-          <div class="player-id">
-            <span class="player-avatar avatar-black" id="top-avatar">B</span>
-            <span id="top-name" class="player-name">Black</span>
-            <span id="top-rating" class="player-rating"></span>
+        <!-- Board Stack: Top player bar, 8x8 chessboard, bottom player bar -->
+        <div class="board-column">
+          <!-- Top Player Bar (Black default) -->
+          <div class="player-bar" id="top-player-bar">
+            <div class="player-id">
+              <span class="player-avatar avatar-black" id="top-avatar">B</span>
+              <span id="top-name" class="player-name">Black</span>
+              <span id="top-rating" class="player-rating"></span>
+            </div>
+            <div id="top-clock" class="player-clock">--:--</div>
           </div>
-          <div id="top-clock" class="player-clock">--:--</div>
-        </div>
 
-        <!-- Board Row: 28px Eval Bar + 8px Gap + 1:1 8x8 Board -->
-        <div class="board-row">
-          <aside class="eval-bar-shell" id="eval-bar-shell" aria-label="Evaluation bar">
-            <div id="eval-black-fill" class="eval-fill eval-fill-black" style="height: 50%"></div>
-            <div id="eval-white-fill" class="eval-fill eval-fill-white" style="height: 50%"></div>
-            <span id="eval-label-top" class="eval-score eval-score-top"></span>
-            <span id="eval-label-bot" class="eval-score eval-score-bot">+0.2</span>
-          </aside>
+          <!-- Board Row with board and adjacent utility rail -->
+          <div class="board-row">
+            <div id="board" class="chess-board"></div>
 
-          <div id="board" class="chess-board"></div>
-        </div>
-
-        <!-- Bottom Player Bar (aligned to board left & right edges) -->
-        <div class="player-bar" id="bot-player-bar">
-          <div class="player-id">
-            <span class="player-avatar avatar-white" id="bot-avatar">W</span>
-            <span id="bot-name" class="player-name">White</span>
-            <span id="bot-rating" class="player-rating"></span>
+            <!-- Slim Vertical Utility Rail -->
+            <nav class="board-utility-rail" aria-label="Board utilities">
+              <button id="btn-rail-flip" class="rail-btn" title="Flip Board (F)">
+                <span class="rail-icon">⇅</span>
+                <span class="rail-label">FLIP</span>
+              </button>
+              <button id="btn-rail-sound" class="rail-btn active" title="Toggle Mechanical Audio (SND)">
+                <span class="rail-icon" id="sound-icon">🔊</span>
+                <span class="rail-label">SND</span>
+              </button>
+              <button id="btn-rail-coords" class="rail-btn active" title="Toggle Coordinates">
+                <span class="rail-icon">⊞</span>
+                <span class="rail-label">COORD</span>
+              </button>
+            </nav>
           </div>
-          <div id="bot-clock" class="player-clock">--:--</div>
+
+          <!-- Bottom Player Bar (White default) -->
+          <div class="player-bar" id="bot-player-bar">
+            <div class="player-id">
+              <span class="player-avatar avatar-white" id="bot-avatar">W</span>
+              <span id="bot-name" class="player-name">White</span>
+              <span id="bot-rating" class="player-rating"></span>
+            </div>
+            <div id="bot-clock" class="player-clock">--:--</div>
+          </div>
         </div>
 
       </div>
     </section>
 
-    <!-- ══ Right Analysis Sidebar (Chess.com Layout Structure) ══ -->
+    <!-- ══ Right Analysis Sidebar (2-Column Grid Item) ══ -->
     <aside class="right-sidebar">
       <!-- Top Navigation Tabs -->
       <nav class="sidebar-tabs">
@@ -82,26 +108,65 @@
         <button class="tab-btn" data-tab="games">Games</button>
       </nav>
 
-      <!-- Engine Strip -->
-      <div class="engine-strip">
-        <span class="engine-badge" id="engine-eval">+0.20</span>
-        <span class="engine-name" id="engine-meta">Stockfish 16 · d10</span>
+      <!-- Multi-Line Engine Strip (Top 2-3 lines with collapse toggle) -->
+      <div class="engine-section" id="engine-section">
+        <div class="engine-strip">
+          <div class="engine-left">
+            <span class="engine-badge" id="engine-eval">+0.20</span>
+            <span class="engine-name" id="engine-meta">Stockfish 16 · d10</span>
+          </div>
+          <button id="btn-engine-toggle" class="engine-toggle-btn" title="Toggle MultiPV Lines">
+            LINES <span id="engine-toggle-arrow">▾</span>
+          </button>
+        </div>
+        <div class="engine-lines-panel" id="engine-lines-panel">
+          <div class="engine-line" id="engine-line-1">
+            <span class="line-pv-score" id="pv1-score">+0.20</span>
+            <span class="line-pv-moves" id="pv1-moves">1. e4 e5 2. Nf3 Nc6 3. Bb5</span>
+          </div>
+          <div class="engine-line" id="engine-line-2">
+            <span class="line-pv-score" id="pv2-score">+0.15</span>
+            <span class="line-pv-moves" id="pv2-moves">1. d4 d5 2. c4 e6 3. Nc3</span>
+          </div>
+          <div class="engine-line" id="engine-line-3">
+            <span class="line-pv-score" id="pv3-score">+0.08</span>
+            <span class="line-pv-moves" id="pv3-moves">1. Nf3 d5 2. g3 Nf6 3. Bg2</span>
+          </div>
+        </div>
       </div>
 
-      <!-- Opening Subheader Bar (mirrors Chess.com "Starting Position" bar) -->
+      <!-- Opening Subheader Bar (Live updated on every move) -->
       <div class="opening-strip" id="opening-strip">
-        <span id="opening-banner">Starting Position</span>
+        <div class="opening-title-wrap">
+          <span class="opening-book-icon">📖</span>
+          <span id="opening-banner">Starting Position</span>
+        </div>
         <span id="opening-eco-badge" class="eco-tag"></span>
       </div>
 
       <!-- Tab 1: MOVES -->
       <div id="tab-moves" class="tab-content active">
+        <!-- Zero-Click Quick Import Panel (visible when no game loaded) -->
+        <div id="quick-import-panel" class="quick-import-panel">
+          <div class="import-dropzone" id="import-dropzone">
+            <div class="import-header">
+              <span class="import-title">QUICK IMPORT</span>
+              <span class="import-hint">Drop .pgn file or paste below</span>
+            </div>
+            <textarea id="quick-input" class="quick-textarea" placeholder="Paste PGN or FEN here... (auto-detects or press Load)" rows="3"></textarea>
+            <div class="import-actions">
+              <button id="quick-load-btn" class="btn btn-secondary btn-sm">LOAD POSITION / GAME</button>
+              <button id="quick-sample-btn" class="btn btn-text btn-sm" title="Load sample game">SAMPLE GAME</button>
+            </div>
+          </div>
+        </div>
+
         <div class="move-list-scroll" id="move-list-scroll">
           <table id="move-table" class="move-table">
             <tbody id="move-tbody"></tbody>
           </table>
           <div id="empty-moves" class="empty-state">
-            No game loaded.<br />Paste PGN/FEN in Info or load Chess.com games.
+            No game loaded.<br />Use Quick Import above or fetch games from Chess.com.
           </div>
         </div>
       </div>
@@ -109,65 +174,176 @@
       <!-- Tab 2: INFO (PGN/FEN Input + Headers) -->
       <div id="tab-info" class="tab-content hidden">
         <div class="tab-scroll-pad">
-          <label class="field-label" for="pgn-input">PASTE PGN OR FEN</label>
-          <textarea id="pgn-input" class="pgn-textarea" placeholder="Paste PGN or FEN here... (Ctrl+Enter to analyse)"
-            rows="8"></textarea>
+          <label class="field-label" for="pgn-input">FULL PGN OR FEN</label>
+          <textarea id="pgn-input" class="pgn-textarea" placeholder="Paste PGN or FEN here... (Ctrl+Enter to analyse)" rows="8"></textarea>
+          <div class="info-actions">
+            <button id="info-load-btn" class="btn btn-secondary">ANALYSE INPUT</button>
+          </div>
           <div id="status-msg" class="status-msg"></div>
           <div id="game-headers" class="info-card hidden"></div>
         </div>
       </div>
 
-      <!-- Tab 3: OPENINGS -->
+      <!-- Tab 3: OPENINGS (Fully functional Live Lichess Explorer) -->
       <div id="tab-openings" class="tab-content hidden">
-        <div class="tab-scroll-pad">
-          <div id="opening-card" class="info-card">
-            <div class="info-row">
-              <span class="info-key">ECO CODE</span>
-              <span class="info-val" id="opening-eco">—</span>
+        <div class="openings-view">
+          
+          <!-- Opening Hero Card -->
+          <div class="opening-hero-card">
+            <div class="hero-top-row">
+              <span class="hero-eco-badge" id="opening-hero-eco">ECO</span>
+              <div class="db-toggle-group">
+                <button class="db-toggle-btn active" id="db-btn-masters" data-db="masters">Masters</button>
+                <button class="db-toggle-btn" id="db-btn-lichess" data-db="lichess">Lichess</button>
+              </div>
             </div>
-            <div class="info-row">
-              <span class="info-key">OPENING NAME</span>
-              <span class="info-val" id="opening-name">Starting Position</span>
-            </div>
-            <div class="info-row">
-              <span class="info-key">ENGINE BEST MOVE</span>
-              <span class="info-val" id="opening-best">—</span>
+            <div class="hero-name" id="opening-hero-name">Starting Position</div>
+            <div class="hero-stats-row">
+              <span id="opening-total-games" class="hero-stat-text">Loading master games...</span>
+              <span id="opening-engine-best" class="hero-stat-best">Engine: —</span>
             </div>
           </div>
+
+          <!-- Out of book banner (conditional) -->
+          <div id="out-of-book-banner" class="out-of-book-banner hidden">
+            <div class="oob-text">
+              <span class="oob-icon">ℹ</span>
+              <span>Out of opening book</span>
+            </div>
+            <button id="btn-return-book" class="btn btn-sm btn-secondary">Return to last book move</button>
+          </div>
+
+          <!-- Candidate Moves Section -->
+          <div class="candidates-section">
+            <div class="candidates-header">
+              <span>CONTINUATIONS</span>
+              <span class="cand-legend">
+                <span class="cand-dot-w"></span>W
+                <span class="cand-dot-d"></span>D
+                <span class="cand-dot-b"></span>B
+              </span>
+            </div>
+
+            <div class="candidates-scroll" id="candidates-scroll">
+              <table class="candidates-table" id="candidates-table">
+                <thead>
+                  <tr>
+                    <th class="th-move">Move</th>
+                    <th class="th-games">Games</th>
+                    <th class="th-bar">Results (% W / D / B)</th>
+                  </tr>
+                </thead>
+                <tbody id="candidates-tbody">
+                  <!-- Populated dynamically -->
+                </tbody>
+              </table>
+              <div id="candidates-empty" class="empty-state hidden">No book continuations found for this position.</div>
+            </div>
+          </div>
+
         </div>
       </div>
 
-      <!-- Tab 4: GAMES (Chess.com) -->
+      <!-- Tab 4: GAMES (Chess.com & Lichess) -->
       <div id="tab-games" class="tab-content hidden">
+        <div class="games-tab-header">
+          <div class="user-search-row">
+            <input id="tab-chesscom-input" class="text-input" type="text" placeholder="Chess.com username..." />
+            <button id="tab-chesscom-btn" class="btn btn-secondary">SEARCH</button>
+          </div>
+        </div>
         <div id="games-list" class="games-list">
-          <div class="empty-state">Enter a Chess.com username above to load games.</div>
+          <div class="empty-state">Enter a username above to load recent games.</div>
         </div>
       </div>
 
-      <!-- Bottom Summary + Primary CTA + Playback Controls (Chess.com footer) -->
+      <!-- Bottom Summary & Classification Card + Primary CTA + Playback Controls -->
       <div class="sidebar-footer">
-        <div class="quality-summary" id="quality-summary">
-          <span><i class="clf-dot clf-best"></i> <b id="cnt-best">0</b> Best</span>
-          <span><i class="clf-dot clf-inaccuracy"></i> <b id="cnt-inacc">0</b> Inacc</span>
-          <span><i class="clf-dot clf-mistake"></i> <b id="cnt-mistake">0</b> Mistake</span>
-          <span><i class="clf-dot clf-blunder"></i> <b id="cnt-blunder">0</b> Blunder</span>
+        
+        <!-- Game Summary & Classification Card -->
+        <div class="game-summary-card" id="game-summary-card">
+          <!-- Accuracy % Bar -->
+          <div class="accuracy-row" id="accuracy-row">
+            <div class="accuracy-item">
+              <span class="accuracy-player" id="acc-white-label">White Acc:</span>
+              <span class="accuracy-val" id="acc-white-val">—</span>
+            </div>
+            <div class="accuracy-bar-track">
+              <div class="accuracy-bar-fill" id="acc-white-bar" style="width: 50%"></div>
+            </div>
+            <div class="accuracy-item">
+              <span class="accuracy-player" id="acc-black-label">Black Acc:</span>
+              <span class="accuracy-val" id="acc-black-val">—</span>
+            </div>
+          </div>
+
+          <!-- Structured 4-Column Badge Grid with Filter Action -->
+          <div class="quality-grid" id="quality-grid" title="Click category to jump/filter moves">
+            <button class="clf-badge-btn" data-clf="best" title="Filter Best moves">
+              <span class="badge-head">
+                <span class="badge-icon badge-best">★</span>
+                <span class="badge-label">Best</span>
+              </span>
+              <span class="badge-count" id="cnt-best">0</span>
+            </button>
+
+            <button class="clf-badge-btn" data-clf="inaccuracy" title="Filter Inaccuracies">
+              <span class="badge-head">
+                <span class="badge-icon badge-inaccuracy">?!</span>
+                <span class="badge-label">Inacc</span>
+              </span>
+              <span class="badge-count" id="cnt-inacc">0</span>
+            </button>
+
+            <button class="clf-badge-btn" data-clf="mistake" title="Filter Mistakes">
+              <span class="badge-head">
+                <span class="badge-icon badge-mistake">?</span>
+                <span class="badge-label">Mistake</span>
+              </span>
+              <span class="badge-count" id="cnt-mistake">0</span>
+            </button>
+
+            <button class="clf-badge-btn" data-clf="blunder" title="Filter Blunders">
+              <span class="badge-head">
+                <span class="badge-icon badge-blunder">??</span>
+                <span class="badge-label">Blunder</span>
+              </span>
+              <span class="badge-count" id="cnt-blunder">0</span>
+            </button>
+          </div>
         </div>
 
-        <button id="analyse-btn" class="btn btn-primary">★ Game Review / Analyse</button>
+        <!-- Primary CTA Button -->
+        <button id="analyse-btn" class="btn btn-primary">
+          <span class="cta-glyph">★</span>
+          <span>Game Review / Analyse</span>
+        </button>
 
+        <!-- Playback Navigation Controls with Keycap hints -->
         <div class="nav-controls">
-          <button id="btn-start" class="nav-btn" title="Start (Home)">|&lt;</button>
-          <button id="btn-prev" class="nav-btn" title="Previous (Left)">&lt;</button>
-          <button id="btn-next" class="nav-btn" title="Next (Right)">&gt;</button>
-          <button id="btn-end" class="nav-btn" title="End (End)">&gt;|</button>
-          <button id="btn-flip" class="nav-btn" title="Flip Board (F)">⇅</button>
+          <button id="btn-start" class="nav-btn" title="Start (Home / ↑)">
+            <span class="nav-symbol">|&lt;</span>
+            <span class="key-hint">↑</span>
+          </button>
+          <button id="btn-prev" class="nav-btn" title="Previous (←)">
+            <span class="nav-symbol">&lt;</span>
+            <span class="key-hint">←</span>
+          </button>
+          <button id="btn-next" class="nav-btn" title="Next (→)">
+            <span class="nav-symbol">&gt;</span>
+            <span class="key-hint">→</span>
+          </button>
+          <button id="btn-end" class="nav-btn" title="End (End / ↓)">
+            <span class="nav-symbol">&gt;|</span>
+            <span class="key-hint">↓</span>
+          </button>
         </div>
       </div>
     </aside>
 
   </main>
 
-  <script src="/static/app.js?v=3"></script>
+  <script src="/static/app.js?v=6"></script>
 </body>
 
 </html>
