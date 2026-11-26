@@ -1,13 +1,10 @@
 /* ============================================================
-   Blunderless — app.js (v6 Refactored)
-   - Staunton vector SVGs (viewBox 0 0 45 45, geometricPrecision)
-     White: #FAF6F0 fill, #2B1A12 stroke
-     Black: #22150E fill, #D8C8B8 interior detail strokes (no thick white outer sticker)
-   - Loud creamy/clacky mechanical keyboard ASMR Web Audio engine
-     DynamicsCompressorNode + GainNode + 3-layer synthesis (thock, clack, snap, jitter)
-   - Live Lichess Opening Explorer (Masters / Lichess database toggle)
-     Debounced, cached by FEN, candidate moves table with win/draw/loss % bars,
-     interactive candidate clicking, out-of-book detection & return-to-book button.
+   Blunderless — app.js
+   - Interactive Chessboard (custom poster SVGs via pieces.js)
+   - Wooden + Mechanical PBT Keyboard Clack Web Audio engine
+   - Stockfish MultiPV engine strip, Eval Bar & Best Move Subgame
+   - Opening Explorer (Lichess Explorer + local ECO book fallback)
+   - 2-Column Game Review, Eval Graph & Coach's Post-Game Report
    ============================================================ */
 
 'use strict';
@@ -226,8 +223,8 @@ const state = {
   plyIndex: 0,
   initialFen: null,
   initialEval: null,
+  initialTopLines: [],
   orientation: 'white',
-  boardFlipped: false,
   searchedUser: '',
   board: null,
   activeFilter: null,
@@ -266,6 +263,8 @@ const state = {
     white_elo: '', black_elo: '',
     initial_clock: '--:--',
   },
+  gameReport: null,
+  reportSide: 'white',
 };
 
 // ── Cache & Debounce for Live Opening Explorer ───────────────
@@ -308,12 +307,21 @@ const CLF_META = {
   blunder: { glyph: '??', cls: 'glyph-blunder', badgeCls: 'clf-blunder', title: 'Blunder' },
 };
 
-// ── Shared Chess.js Position Builder ────────────────────────
+// ── Shared Chess.js Position Builder (O(1) FEN load when cached) ──
 function buildGameAtPly(ply = state.plyIndex) {
   const game = new Chess();
+  const clamped = Math.max(0, Math.min(ply, state.moves.length));
+  if (clamped === 0) {
+    if (state.initialFen) game.load(state.initialFen);
+    return game;
+  }
+  const targetMove = state.moves[clamped - 1];
+  if (targetMove && targetMove.fen && game.load(targetMove.fen)) {
+    return game;
+  }
+  // Fallback if a synthetic move lacks a cached FEN
   if (state.initialFen) game.load(state.initialFen);
-  const limit = Math.min(ply, state.moves.length);
-  for (let i = 0; i < limit; i++) {
+  for (let i = 0; i < clamped; i++) {
     game.move(state.moves[i].san);
   }
   return game;
@@ -321,11 +329,14 @@ function buildGameAtPly(ply = state.plyIndex) {
 
 function resetSummaryCard() {
   state.activeFilter = null;
+  state.gameReport = null;
   document.querySelectorAll('.review-cnt-btn').forEach(b => b.classList.remove('filter-active'));
   const emptyEl = $('review-empty');
   const bodyEl = $('review-body');
+  const reportEl = $('coach-report-section');
   if (emptyEl) emptyEl.classList.remove('hidden');
   if (bodyEl) bodyEl.classList.add('hidden');
+  if (reportEl) reportEl.classList.add('hidden');
 }
 
 // ── Eval Bar & Engine Strip ─────────────────────────────────
@@ -356,9 +367,11 @@ function setEvalBar(score) {
 
   engineEval.textContent = formatted;
 
-  const pct = Math.round(50 + 50 * Math.tanh(cp / 350));
-  evalBlackFill.style.height = (100 - pct) + '%';
-  evalWhiteFill.style.height = pct + '%';
+  // Use smooth floating-point height (no integer rounding) so subtle book-move
+  // shifts like +0.15 -> +0.42 visibly glide the evaluation bar.
+  const pct = Math.max(2, Math.min(98, 50 + 50 * Math.tanh(cp / 300)));
+  evalBlackFill.style.height = (100 - pct).toFixed(2) + '%';
+  evalWhiteFill.style.height = pct.toFixed(2) + '%';
 
   const evalShell = $('eval-bar-shell');
   const isFlipped = state.orientation === 'black';
@@ -389,22 +402,14 @@ function updateEngineLines(score, bestMoveSan, topLines = null) {
     return;
   }
 
+  // Fallback when only top move & score exist (never fabricate fake PV lines)
   const s = score || { type: 'cp', value: 20 };
-  const base = s.type === 'mate' ? `M${s.value}` : (s.value >= 0 ? `+${(s.value / 100).toFixed(2)}` : `${(s.value / 100).toFixed(2)}`);
-
-  $('pv1-score').textContent = base;
-  if (bestMoveSan) {
-    $('pv1-moves').textContent = `1. ${bestMoveSan} ... (best variation)`;
-  } else {
-    $('pv1-moves').textContent = '1. e4 e5 2. Nf3 Nc6 3. Bb5';
-  }
-
-  if (s.type === 'cp') {
-    const cp2 = s.value - 12;
-    const cp3 = s.value - 24;
-    $('pv2-score').textContent = (cp2 >= 0 ? `+${(cp2 / 100).toFixed(2)}` : `${(cp2 / 100).toFixed(2)}`);
-    $('pv3-score').textContent = (cp3 >= 0 ? `+${(cp3 / 100).toFixed(2)}` : `${(cp3 / 100).toFixed(2)}`);
-  }
+  $('pv1-score').textContent = formatScoreStr(s);
+  $('pv1-moves').textContent = bestMoveSan ? `Best: ${bestMoveSan}` : '—';
+  $('pv2-score').textContent = '—';
+  $('pv2-moves').textContent = '—';
+  $('pv3-score').textContent = '—';
+  $('pv3-moves').textContent = '—';
 }
 
 // ── Live Opening Explorer (Backend Proxy + Built-in ECO Book) ──
@@ -538,6 +543,7 @@ function playInteractiveMove(san) {
 
   const afterFen = tmpGame.fen();
   const ply = state.plyIndex + 1;
+  const prevScore = state.plyIndex > 0 ? state.moves[state.plyIndex - 1]?.eval_after : state.initialEval;
 
   // Append move into state if exploring past current game length
   const syntheticMove = {
@@ -548,9 +554,11 @@ function playInteractiveMove(san) {
     san: moveRes.san,
     fen: afterFen,
     clock: '--:--',
-    eval_after: { type: 'cp', value: 15 },
+    eval_after: prevScore ? { ...prevScore } : { type: 'cp', value: 20 },
     eval_change: 0,
-    classification: 'best',
+    epl: 0,
+    classification: 'book',
+    best_move: null,
     best_move_san: san,
   };
 
@@ -560,6 +568,24 @@ function playInteractiveMove(san) {
 
   renderMoveList(state.moves);
   goToPly(ply);
+
+  // Fetch live Stockfish evaluation for the book continuation so the eval bar updates accurately
+  fetchApi('/api/analyse-fen', 'POST', { fen: afterFen, depth: 10 })
+    .then(res => {
+      if (!res || !res.engine) return;
+      syntheticMove.eval_after = res.engine.score;
+      syntheticMove.best_move = res.engine.best_move || null;
+      syntheticMove.best_move_san = res.engine.best_move_san || san;
+
+      // Only update live UI if user is still viewing this exact explored ply
+      if (state.plyIndex === ply && state.moves[ply - 1] === syntheticMove) {
+        setEvalBar(res.engine.score);
+        updateEngineLines(res.engine.score, res.engine.best_move_san, res.engine.top_lines);
+        updateBestMoveUI();
+        renderBoardArrows();
+      }
+    })
+    .catch(() => { /* keep fallback score if engine busy */ });
 }
 
 // ── Player Bars & Clocks ────────────────────────────────────
@@ -624,7 +650,7 @@ function initBoard() {
 
     const coachEl = $('knight-coach-stage');
     const isDesktopSide = window.innerWidth >= 1220 && coachEl;
-    const coachReserveW = isDesktopSide ? Math.min(290, coachEl.offsetWidth + 28) : 0;
+    const coachReserveW = isDesktopSide ? Math.min(360, coachEl.offsetWidth + 28) : 0;
     const coachReserveH = (!isDesktopSide && coachEl) ? coachEl.offsetHeight + 16 : 0;
 
     // Available space accounting for padding, player bars, and floating knight coach
@@ -861,16 +887,12 @@ function renderBoardArrows() {
   }
 }
 
-function renderUserArrows() {
-  renderBoardArrows();
-}
-
 function clearAnnotations() {
   if (state.userHighlights.size === 0 && state.userArrows.length === 0) return;
   state.userHighlights.clear();
   state.userArrows = [];
   renderUserHighlights();
-  renderUserArrows();
+  renderBoardArrows();
 }
 
 function setupBoardAnnotations() {
@@ -923,7 +945,7 @@ function setupBoardAnnotations() {
         );
         state.userArrows.push({ from: startSq, to: endSq, color: style.arrow });
       }
-      renderUserArrows();
+      renderBoardArrows();
     }
   });
 }
@@ -1087,13 +1109,17 @@ function goToPly(ply) {
     } else if (ply < prevPly) {
       sounds.reverse();
     }
-    updateEngineLines(moveData.eval_after, moveData.best_move_san);
+    updateEngineLines(moveData.eval_after, moveData.best_move_san, moveData.top_lines || null);
   } else {
     highlightLastMove(null, null, null);
     if (ply < prevPly) {
       sounds.reverse();
     }
-    updateEngineLines(state.initialEval, state.initialBestMoveSan || state.moves[0]?.best_move_san);
+    updateEngineLines(
+      state.initialEval,
+      state.initialBestMoveSan || state.moves[0]?.best_move_san,
+      state.initialTopLines?.length ? state.initialTopLines : null
+    );
   }
 
   // Update Live Opening Explorer & ECO pill
@@ -1132,16 +1158,50 @@ function playMoveSound(moveData, boardAfter) {
 function calculateAccuracy(moves) {
   if (!moves || moves.length === 0) return { white: null, black: null };
 
+  // Authentic Lichess volatility-weighted mean + harmonic mean (mirrors src/server.py)
+  const scoreToWinPct = (score) => {
+    if (!score) return 50.0;
+    const cp = score.type === 'mate'
+      ? (score.value > 0 ? 10000 : -10000)
+      : score.value;
+    const clamped = Math.max(-4000, Math.min(4000, cp));
+    return 100.0 / (1.0 + Math.exp(-0.00368208 * clamped));
+  };
+
+  const winPcts = [scoreToWinPct(state.initialEval || { type: 'cp', value: 20 })];
+  for (const m of moves) {
+    winPcts.push(scoreToWinPct(m.eval_after));
+  }
+
+  const nPlies = moves.length;
+  const winSize = Math.max(2, Math.min(8, Math.floor(nPlies / 10) || 2));
+  const weights = [];
+  for (let i = 0; i < nPlies; i++) {
+    const start = Math.max(0, i - Math.floor(winSize / 2));
+    const end = Math.min(winPcts.length, start + winSize);
+    const slice = winPcts.slice(start, end);
+    const meanW = slice.reduce((a, b) => a + b, 0) / slice.length;
+    const varW = slice.reduce((a, b) => a + (b - meanW) ** 2, 0) / slice.length;
+    weights.push(Math.max(0.5, Math.min(12.0, Math.sqrt(varW))));
+  }
+
   const sideAcc = (color) => {
-    const side = moves.filter(m => m.color === color);
-    if (side.length === 0) return null;
-    const accs = side.map(m => {
+    const accs = [];
+    const sideW = [];
+    for (let i = 0; i < moves.length; i++) {
+      const m = moves[i];
+      if (m.color !== color) continue;
       const winLoss = typeof m.epl === 'number' ? m.epl * 100 : Math.max(0, -m.eval_change) / 4;
-      return Math.max(1, Math.min(100, 103.1668 * Math.exp(-0.04354 * winLoss) - 3.1669));
-    });
-    const arith = accs.reduce((a, b) => a + b, 0) / accs.length;
-    const harm = accs.length / accs.reduce((a, b) => a + 1 / b, 0);
-    return ((arith + harm) / 2).toFixed(1);
+      const acc = Math.max(0, Math.min(100, 103.1668 * Math.exp(-0.04354 * winLoss) - 3.1669));
+      accs.push(acc);
+      sideW.push(weights[i]);
+    }
+    if (accs.length === 0) return null;
+
+    const totalW = sideW.reduce((a, b) => a + b, 0);
+    const weightedMean = accs.reduce((sum, a, idx) => sum + a * sideW[idx], 0) / totalW;
+    const harmonicMean = accs.length / accs.reduce((sum, a) => sum + 1 / Math.max(1.0, a), 0);
+    return ((weightedMean + harmonicMean) / 2).toFixed(1);
   };
 
   return {
@@ -1415,6 +1475,158 @@ function renderReviewTab(movesData, summary = null) {
   updateEvalGraphCursor(state.plyIndex);
 }
 
+function renderGameReport(report, side = 'white') {
+  const section = $('coach-report-section');
+  if (!section) return;
+  if (!report || !report[side]) {
+    section.classList.add('hidden');
+    return;
+  }
+
+  state.reportSide = side;
+  section.classList.remove('hidden');
+
+  const data = report[side];
+  const btnW = $('report-btn-white');
+  const btnB = $('report-btn-black');
+  if (btnW) {
+    btnW.textContent = report.white?.player_name || 'White';
+    btnW.classList.toggle('active', side === 'white');
+  }
+  if (btnB) {
+    btnB.textContent = report.black?.player_name || 'Black';
+    btnB.classList.toggle('active', side === 'black');
+  }
+
+  const tonePill = $('report-tone-pill');
+  if (tonePill) {
+    const toneLabels = {
+      instructive: 'INSTRUCTIVE',
+      candid: 'COACH NOTE',
+      sarcastic: 'ROAST MODE',
+    };
+    tonePill.textContent = toneLabels[data.tone] || 'INSTRUCTIVE';
+    tonePill.className = `report-tone-pill tone-${data.tone || 'instructive'}`;
+  }
+
+  const overallEl = $('report-overall-text');
+  if (overallEl) overallEl.textContent = data.overall_summary || '';
+
+  // Stage-by-stage cards (Opening, Middlegame, Endgame)
+  const stagesEl = $('report-stages-list');
+  if (stagesEl) {
+    stagesEl.innerHTML = '';
+    const stageMeta = [
+      { key: 'opening', title: 'Opening' },
+      { key: 'middlegame', title: 'Middlegame' },
+      { key: 'endgame', title: 'Endgame' },
+    ];
+    for (const sm of stageMeta) {
+      const st = data.stages?.[sm.key];
+      if (!st) continue;
+      const card = document.createElement('div');
+      card.className = 'report-stage-card';
+
+      const accText = st.reached && st.accuracy !== null ? `${st.accuracy}%` : '—';
+      const gradeCls = st.grade?.cls || 'na';
+      const gradeLbl = st.grade?.label || 'Not Reached';
+
+      const topHtml = `
+        <div class="stage-card-top">
+          <div class="stage-name-wrap">
+            <span class="stage-name">${sm.title}</span>
+            <span class="stage-range">${st.move_range || ''}</span>
+          </div>
+          <div class="stage-metrics">
+            <span class="stage-acc-num">${accText}</span>
+            <span class="stage-grade-badge grade-${gradeCls}">${gradeLbl}</span>
+          </div>
+        </div>`;
+
+      const commentsWrap = document.createElement('div');
+      commentsWrap.className = 'stage-comments';
+      for (const line of (st.comments || [])) {
+        const p = document.createElement('p');
+        p.textContent = line;
+        commentsWrap.appendChild(p);
+      }
+
+      card.innerHTML = topHtml;
+      card.appendChild(commentsWrap);
+
+      const km = st.key_moment;
+      if (km && km.ply) {
+        const btn = document.createElement('button');
+        btn.className = 'stage-key-move-btn';
+        const prefix = km.is_positive ? '★ Jump to highlight:' : '▸ Jump to key moment:';
+        btn.textContent = `${prefix} Move ${km.move_number} (${km.san}, ${km.eval_after})`;
+        btn.addEventListener('click', () => {
+          goToPly(km.ply);
+        });
+        card.appendChild(btn);
+      }
+
+      stagesEl.appendChild(card);
+    }
+  }
+
+  // Tactics & Strategy cards
+  const skillsEl = $('report-skills-grid');
+  if (skillsEl) {
+    skillsEl.innerHTML = '';
+    const skillItems = [
+      { title: 'Tactics', info: data.tactics },
+      { title: 'Strategy', info: data.strategy },
+    ];
+    for (const item of skillItems) {
+      if (!item.info) continue;
+      const card = document.createElement('div');
+      card.className = 'report-skill-card';
+      const gradeCls = item.info.grade?.cls || 'solid';
+      const score = item.info.score ?? 0;
+
+      card.innerHTML = `
+        <div class="skill-top-row">
+          <span class="skill-title">${item.title}</span>
+          <span class="skill-score-num">${score}/100 · ${item.info.grade?.label || ''}</span>
+        </div>
+        <div class="skill-bar-track">
+          <div class="skill-bar-fill grade-${gradeCls}" style="width: ${score}%"></div>
+        </div>
+      `;
+
+      const ul = document.createElement('ul');
+      ul.className = 'report-bullets';
+      for (const b of (item.info.bullets || [])) {
+        const li = document.createElement('li');
+        li.textContent = b;
+        ul.appendChild(li);
+      }
+      card.appendChild(ul);
+      skillsEl.appendChild(card);
+    }
+  }
+
+  // Next-game tips
+  const tipsEl = $('report-tips-list');
+  if (tipsEl) {
+    tipsEl.innerHTML = '';
+    (data.tips || []).forEach((tip, idx) => {
+      const li = document.createElement('li');
+      li.className = 'report-tip-item';
+      const titleEl = document.createElement('div');
+      titleEl.className = 'report-tip-title';
+      titleEl.textContent = `${idx + 1}. ${tip.title}`;
+      const detailEl = document.createElement('p');
+      detailEl.className = 'report-tip-detail';
+      detailEl.textContent = tip.detail;
+      li.appendChild(titleEl);
+      li.appendChild(detailEl);
+      tipsEl.appendChild(li);
+    });
+  }
+}
+
 // ── Filter Moves by Classification (Per-Player Cycle) ────────
 function filterMovesByClassification(clf, colorFilter = null) {
   const filterKey = `${clf}:${colorFilter || 'all'}`;
@@ -1504,14 +1716,19 @@ async function analyseFen(fen) {
   switchTab('moves');
 }
 
-async function analysePgn(pgn) {
-  const res = await fetchApi('/api/analyse-pgn', 'POST', { pgn, depth: 10 });
+async function analysePgn(pgn, cachedResult = null, targetPly = 0, userHandleOverride = null) {
+  const res = cachedResult || await fetchApi('/api/analyse-pgn', 'POST', { pgn, depth: 10 });
+
+  if (userHandleOverride) {
+    state.searchedUser = userHandleOverride.trim().toLowerCase();
+  }
 
   state.initialFen = res.initial_fen;
   state.initialEval = res.initial_eval;
+  state.initialTopLines = res.initial_top_lines || [];
   state.initialBestMove = res.moves[0]?.best_move || null;
   state.initialBestMoveSan = res.moves[0]?.best_move_san || null;
-  state.topLines = [];
+  state.topLines = state.initialTopLines;
   state.moves = res.moves;
   state.plyIndex = 0;
   state.lastKnownOpening = res.headers.opening || 'Starting Position';
@@ -1538,9 +1755,14 @@ async function analysePgn(pgn) {
   const shouldFlip = Boolean(state.searchedUser && blackPlayer === state.searchedUser);
   setBoardOrientation(shouldFlip ? 'black' : 'white');
 
-  goToPly(0);
+  // Render Coach's Game Report defaulting to the user's own side
+  state.gameReport = res.report || null;
+  renderGameReport(state.gameReport, shouldFlip ? 'black' : 'white');
+
+  const jumpPly = Math.max(0, Math.min(targetPly || 0, res.moves.length));
+  goToPly(jumpPly);
   setStatus(`Loaded · ${res.moves.length} half-moves`, 'ok');
-  switchTab('review');
+  switchTab(jumpPly > 0 ? 'moves' : 'review');
 }
 
 // ── Chess.com Loader ────────────────────────────────────────
@@ -1648,7 +1870,6 @@ async function fetchApi(path, method = 'GET', body = null) {
 
 function setBoardOrientation(orientation) {
   const target = orientation === 'black' ? 'black' : 'white';
-  state.boardFlipped = target === 'black';
   if (state.orientation === target) {
     syncPlayerBars(state.plyIndex);
     return;
@@ -1676,6 +1897,11 @@ function setBoardOrientation(orientation) {
     ? state.initialEval
     : state.moves[state.plyIndex - 1]?.eval_after;
   if (evalScore) setEvalBar(evalScore);
+
+  // Refresh Chester context when orientation changes (updates user vs opponent if no searchedUser)
+  const curFen = buildGameAtPly(state.plyIndex).fen();
+  const curMove = state.plyIndex > 0 ? state.moves[state.plyIndex - 1] : null;
+  updateCoachContext(curFen, state.plyIndex, curMove);
 }
 
 function flipBoard() {
@@ -2260,19 +2486,41 @@ function updateCoachContext(fen, ply, moveData) {
     epl = 0;
   }
 
-  // Compute cumulative/recent blunders, clean recovery streak, play quality & intensity
+  // Identify user vs opponent (matches searched Chess.com username, else board bottom POV)
+  const whiteName = state.headers.white || 'White';
+  const blackName = state.headers.black || 'Black';
+  let userColor = state.orientation === 'black' ? 'black' : 'white';
+  if (state.searchedUser) {
+    if (whiteName.trim().toLowerCase() === state.searchedUser) {
+      userColor = 'white';
+    } else if (blackName.trim().toLowerCase() === state.searchedUser) {
+      userColor = 'black';
+    }
+  }
+  const oppColor = userColor === 'white' ? 'black' : 'white';
+  const userName = userColor === 'white' ? whiteName : blackName;
+  const opponentName = oppColor === 'white' ? whiteName : blackName;
+  const moverColor = moveData ? moveData.color : null;
+  const moverName = moveData ? (moveData.color === 'white' ? whiteName : blackName) : null;
+  const isUserMove = moveData ? (moveData.color === userColor) : true;
+
+  // Compute cumulative/recent blunders, clean recovery streak, user play quality & intensity
   let totalBlunders = 0;
   let blunderStreak = 0;
   let recentBlunders = 0;
   let cleanStreak = 0;
-  let eplSum = 0;
+  let userEplSum = 0;
+  let userMovesSeen = 0;
   let gameIntensity = 0;
   const checkLimit = Math.min(ply, state.moves.length);
   for (let i = 0; i < checkLimit; i++) {
     const m = state.moves[i];
     const c = m?.classification;
     const mEpl = typeof m?.epl === 'number' ? m.epl : 0;
-    eplSum += mEpl;
+    if (m?.color === userColor) {
+      userEplSum += mEpl;
+      userMovesSeen++;
+    }
 
     const isBad = c === 'blunder' || c === 'miss';
     const isClean = c === 'book' || c === 'good' || c === 'excellent' || c === 'best' || c === 'great' || c === 'brilliant';
@@ -2292,7 +2540,7 @@ function updateCoachContext(fen, ply, moveData) {
     }
   }
 
-  const meanEpl = checkLimit > 0 ? Number((eplSum / checkLimit).toFixed(4)) : 0;
+  const meanEpl = userMovesSeen > 0 ? Number((userEplSum / userMovesSeen).toFixed(4)) : 0;
 
   // Dynamic personality tone: starts instructive, rewards good play with analytical respect,
   // escalates to sarcastic/cocky as game intensifies or mistakes pile up
@@ -2339,6 +2587,12 @@ function updateCoachContext(fen, ply, moveData) {
     tone,
     evalFlip,
     destGrid,
+    userColor,
+    userName,
+    opponentName,
+    moverColor,
+    moverName,
+    isUserMove,
     soundEnabled: sounds.enabled,
     topLines: state.topLines,
   };
@@ -2353,6 +2607,32 @@ window.BlunderlessCoach = {
   previewBestMove,
   playExplainDemo,
   cancelExplainDemo,
+};
+
+// Bridge for Home / My Games / Insights views in platform.js
+window.BlunderlessBoard = {
+  openGame: async (pgn, cachedAnalysis = null, targetPly = 0, userHandle = null) => {
+    pgnInput.value = pgn || '';
+    if (quickInput) quickInput.value = pgn || '';
+    if (cachedAnalysis) {
+      await analysePgn(pgn, cachedAnalysis, targetPly, userHandle);
+    } else {
+      if (userHandle) state.searchedUser = userHandle.trim().toLowerCase();
+      await runAnalysis(pgn);
+      if (targetPly > 0) goToPly(targetPly);
+    }
+  },
+  loadSample: () => {
+    pgnInput.value = SAMPLE_PGN;
+    if (quickInput) quickInput.value = SAMPLE_PGN;
+    runAnalysis(SAMPLE_PGN);
+  },
+  resize: () => {
+    window.dispatchEvent(new Event('resize'));
+  },
+  setSearchedUser: (u) => {
+    state.searchedUser = (u || '').trim().toLowerCase();
+  },
 };
 
 function switchDatabase(db) {
@@ -2437,13 +2717,16 @@ document.addEventListener('DOMContentLoaded', () => {
   $('db-btn-masters').addEventListener('click', () => switchDatabase('masters'));
   $('db-btn-lichess').addEventListener('click', () => switchDatabase('lichess'));
 
+  // Coach Game Report White/Black Perspective Toggle
+  $('report-btn-white')?.addEventListener('click', () => {
+    if (state.gameReport) renderGameReport(state.gameReport, 'white');
+  });
+  $('report-btn-black')?.addEventListener('click', () => {
+    if (state.gameReport) renderGameReport(state.gameReport, 'black');
+  });
+
   // Engine Lines Collapse Toggle
   $('btn-engine-toggle').addEventListener('click', toggleEngineLines);
-
-  // Classification Badge Click Filters (legacy guard if any exist)
-  document.querySelectorAll('.clf-badge-btn').forEach(btn => {
-    btn.addEventListener('click', () => filterMovesByClassification(btn.dataset.clf));
-  });
 
   // Action Buttons
   $('analyse-btn').addEventListener('click', () => runAnalysis());

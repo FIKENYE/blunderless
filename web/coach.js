@@ -279,7 +279,7 @@
 
   function buildKnightSvg() {
     return `
-      <svg class="knight-pixel-svg" viewBox="0 0 32 32" width="128" height="128" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <svg class="knight-pixel-svg" viewBox="0 0 32 32" width="192" height="192" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
         <g id="knight-head">${HEAD_NECK_BASE}</g>
         <g id="knight-ears">
           <g class="ears-normal">${EARS_NORMAL}</g>
@@ -471,6 +471,64 @@
       'Wait... three clean moves in a row ({moveSan})? Okay, fine—I\'m coming out of greyscale. Don\'t blow it.',
       'Alright, colour restored. {moveSan} shows signs of life—keep this streak going!',
     ],
+    // ── Opponent-Move Commentary (names {opponentName} directly!) ──
+    opp_opening: [
+      '{opponentName} replies with {moveSan}—still inside opening theory.',
+      'Standard book move ({moveSan}) from {opponentName}. Keep developing cleanly!',
+      '{opponentName} goes {moveSan}. Stick to the center and get your king castled.',
+      '{opponentName} knows their opening lines ({moveSan}). Stay solid.',
+    ],
+    opp_routine: [
+      '{opponentName} plays {moveSan}. Your turn—check their threats before moving!',
+      '{opponentName} goes {moveSan}. Nothing scary yet; improve your least active piece.',
+      '{opponentName} answers with {moveSan}. Eval barely budged—your move.',
+      'Solid reply ({moveSan}) from {opponentName}. Look for active squares!',
+      '{opponentName} chose {moveSan}. Keep your pieces coordinated and stay sharp.',
+    ],
+    opp_strong: [
+      'Careful—{opponentName} found a sharp move with {moveSan}. Respect the threat!',
+      'Clean move from {opponentName} ({moveSan}). Don\'t underestimate them here.',
+      '{opponentName} is cooking with {moveSan}. Stay calm and find a solid defense!',
+      'Ooh, {opponentName} spotted {moveSan}. Time to double-check all your loose pieces.',
+    ],
+    opp_brilliant: [
+      'UH OH!! {opponentName} JUST DROPPED A BRILLIANT {moveSan}!! Stay calm and calculate!',
+      'WAIT A SECOND—DID {opponentName} REALLY FIND {moveSan}?! That sacrifice is legit!!',
+      'Whoa—{opponentName} pulled out a brilliant {moveSan}!! Time to put on your defender hat!',
+    ],
+    opp_mistake: [
+      '{opponentName} slipped slightly with {moveSan}—they missed {bestMoveSan}. Look for ways to punish it!',
+      'Hmm, {opponentName} played {moveSan} instead of {bestMoveSan}. There\'s an opening for you here!',
+      '{opponentName} gave away some momentum with {moveSan}. Time to turn the screws!',
+      'Small inaccuracy from {opponentName} ({moveSan}). Click [EXPLAIN] to see what they missed!',
+    ],
+    opp_miss: [
+      'PHEW! {opponentName} let you off the hook with {moveSan}—they missed {bestMoveSan}!!',
+      'Lucky break! {opponentName} could have crushed with {bestMoveSan}, but played {moveSan} instead!',
+      '{opponentName} missed a big shot ({bestMoveSan}) and chose {moveSan}. Take that second life!',
+    ],
+    opp_blunder: [
+      'WHOA!! {opponentName} JUST BLUNDERED WITH {moveSan}!! Punish them right now!!',
+      'AND {opponentName} SACRIFICES... THEIR ENTIRE POSITION with {moveSan}!! ({bestMoveSan} held everything!)',
+      'HOLD ON—{opponentName} played {moveSan}?! Free advantage on the board—don\'t miss the refutation!',
+      'WAIT A SECOND! {opponentName} just threw the eval bar off a cliff with {moveSan}!!',
+      '{opponentName} looked at the whole board and chose {moveSan}. Thank them politely and punish it!',
+      'ALARM BELLS! {opponentName} slipped huge with {moveSan} instead of {bestMoveSan}—make them pay!',
+    ],
+    opp_checkmate_hype: [
+      'OUCH!! {opponentName} delivered checkmate with {moveSan}... shake it off and check the turning point!',
+      'Lights out—{opponentName} found mate with {moveSan}. Hit the eval graph to see where it swung.',
+    ],
+    opp_manic_meltdown: [
+      'HAHAHA {opponentName} BLUNDERED RIGHT BACK WITH {moveSan}!! NOBODY WANTS TO WIN THIS GAME!!',
+      'EVAL BAR PING-PONG!! {opponentName} drops {moveSan}—THREE BLUNDERS IN A ROW!! PURE CINEMA!!',
+      'OH MY PIXELS!! {opponentName} refuses to accept a free win with {moveSan}!! GUESS THE ELO MATERIAL!!',
+    ],
+    opp_depressed: [
+      '{opponentName} played {moveSan}... four+ blunders in this game. My pixels are turning to dust...',
+      'Even {opponentName} is joining the chaos with {moveSan}. Wake me when someone plays {bestMoveSan}...',
+      'Watching {opponentName} play {moveSan} in greyscale... neither side wants the full point...',
+    ],
   };
 
   // Non-repeating random-ish picker per bucket so lines never repeat back-to-back
@@ -484,10 +542,17 @@
     _lastPickedIndex[bucket] = idx;
 
     const moveNum = ctx?.ply ? Math.ceil(ctx.ply / 2) : 1;
+    const oppName = ctx?.opponentName || 'Your opponent';
+    const userName = ctx?.userName || 'You';
+    const moverName = ctx?.moverName || (ctx?.isUserMove === false ? oppName : userName);
+
     return list[idx]
       .replace(/\{moveSan\}/g, ctx?.moveSan || 'that move')
       .replace(/\{bestMoveSan\}/g, ctx?.bestMoveSan || 'the best move')
-      .replace(/\{moveNum\}/g, String(moveNum));
+      .replace(/\{moveNum\}/g, String(moveNum))
+      .replace(/\{opponentName\}/g, oppName)
+      .replace(/\{userName\}/g, userName)
+      .replace(/\{moverName\}/g, moverName);
   }
 
   // ── 4ms Mechanical Key-Tick Synthesizer (Typewriter Sync) ──
@@ -688,6 +753,22 @@
     if (!ctx || !ctx.moveSan) return pickLine('idle', ctx);
     const tone = ctx.tone || 'instructive';
     const clf = (ctx.classification || '').toLowerCase();
+    const isUser = ctx.isUserMove !== false;
+
+    // Opponent move: explicitly reference {opponentName} so Chester knows who moved!
+    if (!isUser) {
+      if (knightState === 'depressed') return pickLine('opp_depressed', ctx);
+      if (knightState === 'checkmate_hype') return pickLine('opp_checkmate_hype', ctx);
+      if (knightState === 'manic_meltdown') return pickLine('opp_manic_meltdown', ctx);
+      if (knightState === 'brilliant_shock') return pickLine('opp_brilliant', ctx);
+      if (knightState === 'flabbergasted') {
+        return clf === 'miss' ? pickLine('opp_miss', ctx) : pickLine('opp_blunder', ctx);
+      }
+      if (knightState === 'annoyed') return pickLine('opp_mistake', ctx);
+      if (knightState === 'smug' || knightState === 'suspicious') return pickLine('opp_strong', ctx);
+      if (clf === 'book') return pickLine('opp_opening', ctx);
+      return pickLine('opp_routine', ctx);
+    }
 
     // Dedicated redemption lines when snapping OUT of greyscale despair!
     if (prevState === 'depressed' && knightState === 'brilliant_shock') {
@@ -743,6 +824,8 @@
           best_move: ctx.bestMoveUci,
           best_move_san: ctx.bestMoveSan,
           tone: ctx.tone || 'instructive',
+          mover_name: ctx.moverName || null,
+          is_user_move: ctx.isUserMove !== false,
         }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -763,7 +846,7 @@
 
   function handlePositionAnalyzed(ctx) {
     if (!ctx) return;
-    const key = `${ctx.fen}|${ctx.ply}|${ctx.playedMoveUci || ''}`;
+    const key = `${ctx.fen}|${ctx.ply}|${ctx.playedMoveUci || ''}|${ctx.isUserMove}`;
     const prevState = _currentState;
     const newState = determineKnightState(ctx);
 

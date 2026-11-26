@@ -238,11 +238,16 @@ def _compare_played_vs_best(
     }
 
 
-def _synthesize_chester_explanation(facts: dict[str, Any], tone: str = "instructive") -> str:
+def _synthesize_chester_explanation(
+    facts: dict[str, Any],
+    tone: str = "instructive",
+    mover_name: Optional[str] = None,
+    is_user_move: bool = True,
+) -> str:
     """
     Build a clear, beginner-friendly (600 Elo) comparative explanation in
     Chester's adaptive voice (`instructive`, `analytical`, or `sarcastic`),
-    strictly citing verified Stockfish eval/lines and Layer 2 comparisons.
+    explicitly distinguishing between the user's moves and the opponent's moves.
     """
     clf = (facts["classification"] or "info").lower()
     played = facts["played_move"]
@@ -255,6 +260,9 @@ def _synthesize_chester_explanation(facts: dict[str, Any], tone: str = "instruct
     strengths = facts.get("played_strengths") or []
     opening = facts.get("opening_name")
 
+    actor = "Your" if is_user_move else f"{mover_name or 'Opponent'}'s"
+    subj = "You" if is_user_move else (mover_name or "Your opponent")
+
     if not played:
         reason = f" because it {why_best[0]}" if why_best else ""
         line_cite = f" (line: {line_str})" if line_str else ""
@@ -266,11 +274,13 @@ def _synthesize_chester_explanation(facts: dict[str, Any], tone: str = "instruct
         op_note = f" in the {opening}" if opening else ""
         extra = f" — it {strengths[0]}" if strengths else " to claim space and develop smoothly"
         if tone == "sarcastic":
-            return f"Book move{op_note}! {played} holds {ev}{extra}. Let's see how long theory lasts."
-        return f"Book move{op_note}! {played} keeps the eval at {ev}{extra}."
+            return f"Book move{op_note}! {actor} {played} holds {ev}{extra}. Let's see how long theory lasts."
+        return f"Book move{op_note}! {actor} {played} keeps the eval at {ev}{extra}."
 
     if played == best or clf in ("brilliant", "great", "best", "excellent"):
         reason = f" It {strengths[0]}." if strengths else (f" It {why_best[0]}." if why_best else "")
+        if not is_user_move:
+            return f"{subj} found {played} (eval {ev}).{reason} Sharp move—stay alert!"
         if tone == "analytical":
             return f"Strong precision: {played} maintains {ev}.{reason} Best practical plan."
         if tone == "sarcastic":
@@ -279,28 +289,42 @@ def _synthesize_chester_explanation(facts: dict[str, Any], tone: str = "instruct
 
     # Comparative explanation: WHY `best` was better than `played`!
     parts: list[str] = []
-    if why_hurts:
-        if tone == "sarcastic":
-            parts.append(f"Oof—{played} {why_hurts[0]}.")
-        elif tone == "analytical":
-            parts.append(f"{played} concedes the edge because it {why_hurts[0]}.")
+    if not is_user_move:
+        # Opponent made the slip -> frame it as an opportunity for the user!
+        if why_hurts:
+            hurt_text = why_hurts[0].replace("your ", "their ")
+            parts.append(f"{subj}'s {played} {hurt_text}!")
         else:
-            parts.append(f"Watch out: {played} {why_hurts[0]}.")
+            parts.append(f"{subj}'s {played} drops {abs(delta):.2f} (eval {ev})!")
+        if best:
+            if why_best:
+                joined = " and ".join(why_best[:2]).replace("your ", "their ")
+                parts.append(f"They missed {best}, which {joined}.")
+            else:
+                parts.append(f"{best} would have held their position together.")
     else:
-        if tone == "sarcastic":
-            parts.append(f"Yikes, {played} leaks {abs(delta):.2f} (eval {ev}).")
-        elif tone == "analytical":
-            parts.append(f"{played} drops {abs(delta):.2f} to {ev}.")
+        if why_hurts:
+            if tone == "sarcastic":
+                parts.append(f"Oof—{played} {why_hurts[0]}.")
+            elif tone == "analytical":
+                parts.append(f"{played} concedes the edge because it {why_hurts[0]}.")
+            else:
+                parts.append(f"Watch out: {played} {why_hurts[0]}.")
         else:
-            parts.append(f"{played} slips by {abs(delta):.2f} (eval {ev}).")
+            if tone == "sarcastic":
+                parts.append(f"Yikes, {played} leaks {abs(delta):.2f} (eval {ev}).")
+            elif tone == "analytical":
+                parts.append(f"{played} drops {abs(delta):.2f} to {ev}.")
+            else:
+                parts.append(f"{played} slips by {abs(delta):.2f} (eval {ev}).")
 
-    if best:
-        if why_best:
-            joined = " and ".join(why_best[:2])
-            parts.append(f"{best} was stronger because it {joined}.")
-        else:
-            op_hint = f" and fits the {opening} plan" if opening else ""
-            parts.append(f"{best} keeps your pieces better coordinated{op_hint}.")
+        if best:
+            if why_best:
+                joined = " and ".join(why_best[:2])
+                parts.append(f"{best} was stronger because it {joined}.")
+            else:
+                op_hint = f" and fits the {opening} plan" if opening else ""
+                parts.append(f"{best} keeps your pieces better coordinated{op_hint}.")
 
     if line_str:
         parts.append(f"Line: {line_str} (eval {ev}).")
@@ -371,6 +395,8 @@ def explain_position(
     engine: Optional[Any] = None,
     use_llm: bool = True,
     tone: str = "instructive",
+    mover_name: Optional[str] = None,
+    is_user_move: bool = True,
 ) -> dict[str, Any]:
     """
     Produce a grounded comparative explanation (played vs best) and best PV UCI
@@ -440,13 +466,20 @@ def explain_position(
         "eval_change_pawns": round((eval_change or 0) / 100.0, 2),
         "best_line": (top_lines[0].get("pv_san") or [])[:5] if top_lines else [],
         "tone": tone,
+        "mover_name": mover_name,
+        "is_user_move": is_user_move,
         **comparison,
     }
 
     text = _try_gemini_explain(facts, tone=tone) if use_llm else None
     source = "llm" if text else "grounded-comparative"
     if not text:
-        text = _synthesize_chester_explanation(facts, tone=tone)
+        text = _synthesize_chester_explanation(
+            facts,
+            tone=tone,
+            mover_name=mover_name,
+            is_user_move=is_user_move,
+        )
 
     clf = (classification or "").lower()
     if clf in ("brilliant", "great", "best", "excellent"):

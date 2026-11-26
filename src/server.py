@@ -19,12 +19,41 @@ import urllib.request
 
 import chess
 import chess.pgn
-from fastapi import FastAPI, HTTPException, Query, Request
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi import FastAPI, HTTPException, Query, Request, Response
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from src.chesscom import get_recent_games
+from src.auth import (
+    SESSION_COOKIE,
+    create_google_login_url,
+    is_google_configured,
+    login_local_profile,
+    logout_session,
+    resolve_user,
+    verify_and_exchange_google_code,
+)
+from src.chesscom import (
+    build_rating_history_from_games,
+    get_player_profile,
+    get_player_stats,
+    get_recent_games,
+)
+from src.db import (
+    delete_linked_account,
+    delete_saved_report,
+    get_batch_job,
+    get_cached_analysis_by_pgn,
+    get_game_by_id,
+    get_linked_accounts,
+    get_saved_report,
+    init_db,
+    list_saved_reports,
+    query_games,
+    save_game_analysis,
+    upsert_games,
+    upsert_linked_account,
+)
 from src.engine import (
     _score_to_cp,
     analyse_position,
@@ -33,7 +62,14 @@ from src.engine import (
 )
 from src.features import extract_features
 from src.explain import explain_position
+from src.insights import cancel_batch_job, start_batch_analysis_job
+from src.lichess import (
+    get_lichess_games,
+    get_lichess_profile_and_stats,
+    get_lichess_rating_history,
+)
 from src.openings import is_book_position, lookup_opening
+from src.report import build_game_report
 
 # In-memory cache for PGN analyses so re-running is instant and 100% deterministic
 _PGN_CACHE: dict[tuple[str, int], dict[str, Any]] = {}
@@ -50,6 +86,32 @@ class FenRequest(BaseModel):
 class PgnRequest(BaseModel):
     pgn: str
     depth: int = Field(default=10, ge=1, le=20)
+    game_id: Optional[int] = None
+
+
+class LocalLoginRequest(BaseModel):
+    display_name: str = Field(..., min_length=1, max_length=48)
+
+
+class LinkAccountRequest(BaseModel):
+    platform: str = Field(..., pattern="^(chesscom|lichess)$")
+    username: str = Field(..., min_length=1, max_length=64)
+    sync_limit: int = Field(default=60, ge=5, le=200)
+
+
+class SyncGamesRequest(BaseModel):
+    platform: str = Field(default="all", pattern="^(all|chesscom|lichess)$")
+    limit: int = Field(default=60, ge=5, le=200)
+    days: Optional[int] = Field(default=None, ge=1, le=3650)
+
+
+class InsightsAnalyzeRequest(BaseModel):
+    platform: str = Field(default="all", pattern="^(all|chesscom|lichess)$")
+    time_class: str = Field(default="rapid", pattern="^(all|bullet|blitz|rapid|daily)$")
+    period_days: int = Field(default=30, ge=0, le=3650)
+    max_games: int = Field(default=50, ge=1, le=200)
+    depth: int = Field(default=8, ge=6, le=16)
+    sync_first: bool = Field(default=True)
 
 
 class ExplainRequest(BaseModel):
@@ -62,11 +124,14 @@ class ExplainRequest(BaseModel):
     best_move: Optional[str] = None
     best_move_san: Optional[str] = None
     tone: Optional[str] = "instructive"
+    mover_name: Optional[str] = None
+    is_user_move: Optional[bool] = True
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Keep one Stockfish engine process alive for the lifetime of the server."""
+    """Initialise SQLite database and keep one Stockfish engine alive for the server."""
+    init_db()
     engine = get_engine()
     app.state.engine = engine
     try:
@@ -76,6 +141,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Blunderless", lifespan=lifespan)
+init_db()
 
 if WEB_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(WEB_DIR)), name="static")
@@ -200,35 +266,73 @@ def _classify_move_full(
     return "blunder", eval_change, round(epl, 4)
 
 
-def _compute_game_summary(moves_out: list[dict[str, Any]]) -> dict[str, Any]:
+def _compute_game_summary(
+    moves_out: list[dict[str, Any]],
+    initial_eval: Optional[dict[str, Any]] = None,
+) -> dict[str, Any]:
     """
-    Compute authentic Lichess/CAPS2 EPL accuracy % (arithmetic + harmonic mean),
-    Average Centipawn Loss (ACPL), and ACPL-calibrated Game Rating.
+    Compute authentic Lichess open-source Accuracy % (volatility-weighted mean
+    + harmonic mean of win% accuracy), Average Centipawn Loss (ACPL), and
+    ACPL-calibrated Game Rating.
     """
+    if not moves_out:
+        return {
+            "white_accuracy": None,
+            "black_accuracy": None,
+            "white_game_rating": None,
+            "black_game_rating": None,
+            "white_acpl": None,
+            "black_acpl": None,
+        }
+
+    # Build full game White-POV win% series [ply 0, ply 1, ..., ply N]
+    init_cp = _score_to_cp(initial_eval, chess.WHITE) if initial_eval else 20
+    win_pcts: list[float] = [_cp_to_ep(init_cp) * 100.0]
+    for m in moves_out:
+        turn_after = chess.BLACK if m["color"] == "white" else chess.WHITE
+        cp_after = _score_to_cp(m["eval_after"], turn_after)
+        win_pcts.append(_cp_to_ep(cp_after) * 100.0)
+
+    # Volatility weights per ply using sliding window stddev (Lichess AccuracyPercent.scala)
+    n_plies = len(moves_out)
+    win_size = max(2, min(8, n_plies // 10 or 2))
+    weights: list[float] = []
+    for i in range(n_plies):
+        start = max(0, i - win_size // 2)
+        end = min(len(win_pcts), start + win_size)
+        window = win_pcts[start:end]
+        mean_w = sum(window) / len(window)
+        var_w = sum((x - mean_w) ** 2 for x in window) / len(window)
+        stddev = math.sqrt(var_w)
+        weights.append(max(0.5, min(12.0, stddev)))
+
     def side_metrics(color: str) -> tuple[Optional[float], Optional[int], Optional[int]]:
-        side_moves = [m for m in moves_out if m["color"] == color]
-        if not side_moves:
-            return None, None, None
-
-        # Win% loss on 0..100 scale
         move_accs: list[float] = []
+        side_weights: list[float] = []
         cpl_list: list[int] = []
-        for m in side_moves:
-            win_loss = float(m.get("epl", 0.0)) * 100.0
-            acc = max(1.0, min(100.0, 103.1668 * math.exp(-0.04354 * win_loss) - 3.1669))
-            move_accs.append(acc)
 
-            # Cap per-move CPL at 1000 cp so mate swings don't skew ACPL to infinity
+        for idx, m in enumerate(moves_out):
+            if m["color"] != color:
+                continue
+            win_loss = float(m.get("epl", 0.0)) * 100.0
+            # Lichess exact formula: 103.1668 * exp(-0.04354 * winDiff) - 3.1669
+            acc = max(0.0, min(100.0, 103.1668 * math.exp(-0.04354 * win_loss) - 3.1669))
+            move_accs.append(acc)
+            side_weights.append(weights[idx])
+
             cpl = min(1000, max(0, -int(m.get("eval_change", 0))))
             cpl_list.append(cpl)
 
-        arith_mean = sum(move_accs) / len(move_accs)
-        harmonic_mean = len(move_accs) / sum(1.0 / a for a in move_accs)
-        accuracy = round((arith_mean + harmonic_mean) / 2.0, 1)
+        if not move_accs:
+            return None, None, None
+
+        total_w = sum(side_weights)
+        weighted_mean = sum(a * w for a, w in zip(move_accs, side_weights)) / total_w
+        # Harmonic mean with small floor (1.0) to avoid division by zero on 0.0% blunders
+        harmonic_mean = len(move_accs) / sum(1.0 / max(1.0, a) for a in move_accs)
+        accuracy = round((weighted_mean + harmonic_mean) / 2.0, 1)
 
         acpl = int(round(sum(cpl_list) / len(cpl_list)))
-
-        # Standard ACPL-to-Elo relationship (e.g. ~100 ACPL -> ~550, ~60 ACPL -> ~1000, ~25 ACPL -> ~1750)
         raw_rating = 2900.0 * math.exp(-0.0165 * acpl)
         rounded_rating = int(max(100, min(3000, round(raw_rating / 50.0) * 50)))
         return accuracy, rounded_rating, acpl
@@ -275,6 +379,10 @@ def parse_and_analyse_pgn(
     initial_fen = board.fen()
     prev_info = analyse_position(initial_fen, depth=depth, multipv=2, engine=engine)
     initial_eval = prev_info["score"]
+    initial_top_lines = [
+        {"score": ln["score"], "move_san": ln["move_san"], "pv_san": ln["pv_san"][:6]}
+        for ln in (prev_info.get("top_lines") or [])[:2]
+    ]
     still_in_book = is_book_position(initial_fen)
     prev_move: Optional[chess.Move] = None
 
@@ -304,6 +412,11 @@ def parse_and_analyse_pgn(
             prev_move=prev_move,
         )
 
+        after_top_lines = [
+            {"score": ln["score"], "move_san": ln["move_san"], "pv_san": ln["pv_san"][:6]}
+            for ln in (after_info.get("top_lines") or [])[:2]
+        ]
+
         moves_out.append(
             {
                 "ply": ply_idx,
@@ -320,6 +433,7 @@ def parse_and_analyse_pgn(
                 "eval_change": eval_change,
                 "epl": epl,
                 "classification": classification,
+                "top_lines": after_top_lines,
             }
         )
         prev_info = after_info
@@ -347,13 +461,24 @@ def parse_and_analyse_pgn(
         "initial_clock": initial_clock,
     }
 
+    summary = _compute_game_summary(moves_out, initial_eval=initial_eval)
+    report = build_game_report(
+        moves_out=moves_out,
+        initial_fen=initial_fen,
+        initial_eval=initial_eval,
+        headers=headers,
+        summary=summary,
+    )
+
     result = {
         "headers": headers,
         "depth": depth,
         "initial_fen": initial_fen,
         "initial_eval": initial_eval,
+        "initial_top_lines": initial_top_lines,
         "moves": moves_out,
-        "summary": _compute_game_summary(moves_out),
+        "summary": summary,
+        "report": report,
     }
     if len(_PGN_CACHE) >= _PGN_CACHE_MAX:
         _PGN_CACHE.pop(next(iter(_PGN_CACHE)))
@@ -386,12 +511,24 @@ def analyse_fen_endpoint(payload: FenRequest, request: Request) -> dict[str, Any
 
 @app.post("/api/analyse-pgn")
 def analyse_pgn_endpoint(payload: PgnRequest, request: Request) -> dict[str, Any]:
-    """Parse a PGN and return move-by-move evaluations and classifications."""
+    """Parse a PGN and return move-by-move evaluations, reusing SQLite cache when available."""
+    cached = get_cached_analysis_by_pgn(payload.pgn, depth=payload.depth)
+    if cached:
+        return cached
+
     eng = _get_app_engine(request)
     try:
-        return parse_and_analyse_pgn(payload.pgn, depth=payload.depth, engine=eng)
+        result = parse_and_analyse_pgn(payload.pgn, depth=payload.depth, engine=eng)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    if payload.game_id:
+        user = _current_user(request)
+        if user:
+            g = get_game_by_id(payload.game_id, user_id=user["id"])
+            if g:
+                save_game_analysis(g["id"], result, g["user_color"])
+    return result
 
 
 @app.post("/api/explain")
@@ -410,6 +547,8 @@ def explain_endpoint(payload: ExplainRequest, request: Request) -> dict[str, Any
             best_move_san=payload.best_move_san,
             engine=eng,
             tone=payload.tone or "instructive",
+            mover_name=payload.mover_name,
+            is_user_move=True if payload.is_user_move is None else payload.is_user_move,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -426,6 +565,14 @@ def opening_lookup_endpoint(
     built-in ECO opening book so book moves are always detected.
     """
     local_data = lookup_opening(fen)
+
+    # Skip remote Lichess Explorer requests deep in middlegame/endgame to avoid 1.8s timeouts
+    try:
+        board = chess.Board(fen)
+        if not local_data and (board.fullmove_number > 18 or len(board.piece_map()) < 22):
+            return {"white": 0, "draws": 0, "black": 0, "moves": [], "opening": None, "source": "out-of-book"}
+    except ValueError:
+        pass
 
     url = f"https://explorer.lichess.org/{db}?fen={urllib.parse.quote(fen)}"
     req = urllib.request.Request(
@@ -452,11 +599,365 @@ def opening_lookup_endpoint(
     return {"white": 0, "draws": 0, "black": 0, "moves": [], "opening": None, "source": "out-of-book"}
 
 
-@app.get("/api/chesscom/{username}")
-def chesscom_games_endpoint(username: str) -> dict[str, Any]:
-    """Fetch the last 5 games for a Chess.com username."""
+def _current_user(request: Request) -> Optional[dict[str, Any]]:
+    return resolve_user(request.cookies.get(SESSION_COOKIE))
+
+
+def _require_user(request: Request) -> dict[str, Any]:
+    user = _current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Please sign in first.")
+    return user
+
+
+def _sync_single_account(user_id: int, platform: str, username: str, limit: int = 60, days: Optional[int] = None) -> dict[str, Any]:
+    """Pull profile, live ratings, ELO history, and recent games for Chess.com or Lichess."""
+    if platform == "chesscom":
+        profile = get_player_profile(username)
+        stats = get_player_stats(profile["username"])
+        games = get_recent_games(profile["username"], limit=limit, days=days, max_archives=12)
+        history = build_rating_history_from_games(profile["username"], games)
+        acc = upsert_linked_account(
+            user_id=user_id,
+            platform="chesscom",
+            username=profile["username"],
+            avatar_url=profile.get("avatar", ""),
+            stats=stats,
+            rating_history=history,
+        )
+        synced = upsert_games(user_id, "chesscom", profile["username"], games)
+        return {"account": acc, "synced_games": synced}
+
+    profile, stats = get_lichess_profile_and_stats(username)
+    history = get_lichess_rating_history(profile["username"])
+    games = get_lichess_games(profile["username"], limit=limit, days=days)
+    acc = upsert_linked_account(
+        user_id=user_id,
+        platform="lichess",
+        username=profile["username"],
+        avatar_url=profile.get("avatar", ""),
+        stats=stats,
+        rating_history=history,
+    )
+    synced = upsert_games(user_id, "lichess", profile["username"], games)
+    return {"account": acc, "synced_games": synced}
+
+
+# ── Auth Endpoints (Google OAuth + Local Profile) ────────────────────────────
+
+@app.get("/api/auth/me")
+def auth_me_endpoint(request: Request) -> dict[str, Any]:
+    user = _current_user(request)
+    linked = get_linked_accounts(user["id"]) if user else []
+    return {
+        "authenticated": bool(user),
+        "user": user,
+        "linked_accounts": linked,
+        "google_configured": is_google_configured(),
+    }
+
+
+@app.post("/api/auth/local")
+def auth_local_login_endpoint(payload: LocalLoginRequest, response: Response) -> dict[str, Any]:
+    user, token = login_local_profile(payload.display_name)
+    response.set_cookie(
+        key=SESSION_COOKIE,
+        value=token,
+        httponly=True,
+        samesite="lax",
+        max_age=30 * 86400,
+    )
+    return {"user": user, "linked_accounts": get_linked_accounts(user["id"])}
+
+
+@app.post("/api/auth/logout")
+def auth_logout_endpoint(request: Request, response: Response) -> dict[str, Any]:
+    logout_session(request.cookies.get(SESSION_COOKIE))
+    response.delete_cookie(SESSION_COOKIE)
+    return {"ok": True}
+
+
+@app.get("/auth/google/login")
+def google_login_redirect():
+    if not is_google_configured():
+        raise HTTPException(
+            status_code=501,
+            detail="Google OAuth is not configured yet. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET environment variables.",
+        )
+    return RedirectResponse(url=create_google_login_url(), status_code=302)
+
+
+@app.get("/auth/google/callback")
+def google_oauth_callback(code: str = Query(...), state: str = Query(...)):
     try:
-        games = get_recent_games(username, limit=5)
+        _, token = verify_and_exchange_google_code(code, state)
+    except (ValueError, RuntimeError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    resp = RedirectResponse(url="/?auth=google_ok", status_code=302)
+    resp.set_cookie(
+        key=SESSION_COOKIE,
+        value=token,
+        httponly=True,
+        samesite="lax",
+        max_age=30 * 86400,
+    )
+    return resp
+
+
+# ── Linked Accounts (Chess.com + Lichess) & Home Dashboard ───────────────────
+
+@app.post("/api/accounts/link")
+def link_account_endpoint(payload: LinkAccountRequest, request: Request, response: Response) -> dict[str, Any]:
+    user = _current_user(request)
+    if not user:
+        # Seamless UX: auto-create a local profile named after their linked chess handle
+        user, token = login_local_profile(payload.username)
+        response.set_cookie(key=SESSION_COOKIE, value=token, httponly=True, samesite="lax", max_age=30 * 86400)
+    try:
+        res = _sync_single_account(user["id"], payload.platform, payload.username, limit=payload.sync_limit)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return {
+        "user": user,
+        "account": res["account"],
+        "synced_games": res["synced_games"],
+        "linked_accounts": get_linked_accounts(user["id"]),
+    }
+
+
+@app.delete("/api/accounts/{platform}")
+def unlink_account_endpoint(platform: str, request: Request) -> dict[str, Any]:
+    user = _require_user(request)
+    delete_linked_account(user["id"], platform.lower())
+    return {"ok": True, "linked_accounts": get_linked_accounts(user["id"])}
+
+
+@app.post("/api/accounts/sync")
+def sync_accounts_endpoint(payload: SyncGamesRequest, request: Request) -> dict[str, Any]:
+    user = _require_user(request)
+    accounts = get_linked_accounts(user["id"])
+    if not accounts:
+        raise HTTPException(status_code=400, detail="Link a Chess.com or Lichess account first.")
+
+    total_synced = 0
+    errors: list[str] = []
+    for acc in accounts:
+        if payload.platform != "all" and acc["platform"] != payload.platform:
+            continue
+        try:
+            res = _sync_single_account(
+                user["id"], acc["platform"], acc["username"], limit=payload.limit, days=payload.days
+            )
+            total_synced += res["synced_games"]
+        except Exception as exc:
+            errors.append(f"{acc['platform']}: {exc}")
+
+    return {
+        "synced_games": total_synced,
+        "errors": errors,
+        "linked_accounts": get_linked_accounts(user["id"]),
+    }
+
+
+@app.get("/api/home/dashboard")
+def home_dashboard_endpoint(request: Request) -> dict[str, Any]:
+    user = _current_user(request)
+    if not user:
+        return {"authenticated": False, "google_configured": is_google_configured()}
+
+    accounts = get_linked_accounts(user["id"])
+    recent = query_games(user["id"], limit=100)
+    games = recent["games"]
+    total = recent["total"]
+    analysed_cnt = recent["analysed_count"]
+
+    wins = sum(1 for g in games if g["user_result"] == "win")
+    losses = sum(1 for g in games if g["user_result"] == "loss")
+    draws = len(games) - wins - losses
+    win_rate = round((wins / len(games)) * 100.0, 1) if games else 0.0
+
+    # Current win/loss streak from newest games
+    streak_type = games[0]["user_result"] if games else None
+    streak_count = 0
+    for g in games:
+        if g["user_result"] == streak_type:
+            streak_count += 1
+        else:
+            break
+
+    analysed_list = [g for g in games if g["analysed"] and g["user_accuracy"] is not None]
+    avg_acc = round(sum(g["user_accuracy"] for g in analysed_list) / len(analysed_list), 1) if analysed_list else None
+    total_brilliants = sum(int(g.get("brilliants") or 0) for g in analysed_list)
+    total_blunders = sum(int(g.get("blunders") or 0) for g in analysed_list)
+
+    return {
+        "authenticated": True,
+        "user": user,
+        "google_configured": is_google_configured(),
+        "linked_accounts": accounts,
+        "metrics": {
+            "total_games": total,
+            "analysed_games": analysed_cnt,
+            "win_rate": win_rate,
+            "wins": wins,
+            "draws": draws,
+            "losses": losses,
+            "streak_type": streak_type,
+            "streak_count": streak_count,
+            "avg_accuracy": avg_acc,
+            "total_brilliants": total_brilliants,
+            "total_blunders": total_blunders,
+        },
+        "recent_games": games[:8],
+        "saved_reports": list_saved_reports(user["id"], limit=4),
+    }
+
+
+# ── Unified Games Library (50-200+ Games, Filterable & Sortable) ─────────────
+
+@app.get("/api/games")
+def list_games_endpoint(
+    request: Request,
+    platform: str = Query(default="all"),
+    time_class: str = Query(default="all"),
+    color: str = Query(default="all"),
+    result: str = Query(default="all"),
+    analysed: str = Query(default="all"),
+    opening: str = Query(default=""),
+    search: str = Query(default=""),
+    sort_by: str = Query(default="newest"),
+    days: Optional[int] = Query(default=None),
+    limit: int = Query(default=60, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+) -> dict[str, Any]:
+    user = _require_user(request)
+    return query_games(
+        user_id=user["id"],
+        platform=platform,
+        time_class=time_class,
+        color=color,
+        result=result,
+        analysed=analysed,
+        opening=opening,
+        search=search,
+        sort_by=sort_by,
+        days=days,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/api/games/{game_id}")
+def get_game_endpoint(game_id: int, request: Request) -> dict[str, Any]:
+    user = _require_user(request)
+    g = get_game_by_id(game_id, user_id=user["id"])
+    if not g:
+        raise HTTPException(status_code=404, detail="Game not found.")
+    return g
+
+
+@app.post("/api/games/{game_id}/analyse")
+def analyse_library_game_endpoint(
+    game_id: int,
+    request: Request,
+    depth: int = Query(default=10, ge=6, le=18),
+) -> dict[str, Any]:
+    user = _require_user(request)
+    g = get_game_by_id(game_id, user_id=user["id"])
+    if not g:
+        raise HTTPException(status_code=404, detail="Game not found.")
+    if g.get("analysed") and g.get("analysis") and (g.get("depth") or 0) >= depth:
+        return {"game": g, "analysis": g["analysis"], "cached": True}
+
+    eng = _get_app_engine(request)
+    analysis = parse_and_analyse_pgn(g["pgn"], depth=depth, engine=eng)
+    save_game_analysis(g["id"], analysis, g["user_color"])
+    updated = get_game_by_id(game_id, user_id=user["id"])
+    return {"game": updated, "analysis": analysis, "cached": False}
+
+
+# ── Background Batch Analysis & Multi-Game Insights Reports ──────────────────
+
+@app.post("/api/insights/analyze")
+def start_insights_job_endpoint(payload: InsightsAnalyzeRequest, request: Request) -> dict[str, Any]:
+    user = _require_user(request)
+    accounts = get_linked_accounts(user["id"])
+    if not accounts:
+        raise HTTPException(status_code=400, detail="Link a Chess.com or Lichess account first.")
+
+    if payload.sync_first:
+        sync_days = payload.period_days if payload.period_days > 0 else None
+        for acc in accounts:
+            if payload.platform != "all" and acc["platform"] != payload.platform:
+                continue
+            try:
+                _sync_single_account(
+                    user["id"],
+                    acc["platform"],
+                    acc["username"],
+                    limit=max(payload.max_games, 80),
+                    days=sync_days,
+                )
+            except Exception:
+                pass
+
+    job = start_batch_analysis_job(
+        user_id=user["id"],
+        platform=payload.platform,
+        time_class=payload.time_class,
+        period_days=payload.period_days,
+        max_games=payload.max_games,
+        depth=payload.depth,
+        analyse_fn=parse_and_analyse_pgn,
+    )
+    return job
+
+
+@app.get("/api/insights/jobs/{job_id}")
+def get_insights_job_endpoint(job_id: str, request: Request) -> dict[str, Any]:
+    user = _require_user(request)
+    job = get_batch_job(job_id, user["id"])
+    if not job:
+        raise HTTPException(status_code=404, detail="Batch job not found.")
+    return job
+
+
+@app.post("/api/insights/jobs/{job_id}/cancel")
+def cancel_insights_job_endpoint(job_id: str, request: Request) -> dict[str, Any]:
+    _require_user(request)
+    cancel_batch_job(job_id)
+    return {"ok": True}
+
+
+@app.get("/api/insights/reports")
+def list_insights_reports_endpoint(request: Request) -> dict[str, Any]:
+    user = _require_user(request)
+    return {"reports": list_saved_reports(user["id"], limit=10)}
+
+
+@app.get("/api/insights/reports/{report_id}")
+def get_insights_report_endpoint(report_id: int, request: Request) -> dict[str, Any]:
+    user = _require_user(request)
+    rep = get_saved_report(report_id, user["id"])
+    if not rep:
+        raise HTTPException(status_code=404, detail="Report not found.")
+    return rep
+
+
+@app.delete("/api/insights/reports/{report_id}")
+def delete_insights_report_endpoint(report_id: int, request: Request) -> dict[str, Any]:
+    user = _require_user(request)
+    delete_saved_report(report_id, user["id"])
+    return {"ok": True}
+
+
+@app.get("/api/chesscom/{username}")
+def chesscom_games_endpoint(username: str, limit: int = Query(default=20, ge=1, le=200)) -> dict[str, Any]:
+    """Fetch recent games for a Chess.com username (default 20, supports up to 200)."""
+    try:
+        games = get_recent_games(username, limit=limit)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except RuntimeError as exc:

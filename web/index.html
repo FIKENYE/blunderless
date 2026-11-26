@@ -19,25 +19,138 @@
   <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
   <script src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"></script>
 
-  <link rel="stylesheet" href="/static/styles.css?v=20" />
+  <link rel="stylesheet" href="/static/styles.css?v=25" />
 </head>
 
 <body>
   <header class="topbar">
-    <div class="brand-frame">
-      <span class="brand-glyph">♞</span>
+    <button id="brand-home-btn" class="brand-frame brand-btn" title="Go to Home & ELO Tracker">
+      <span id="brand-logo-slot" class="brand-logo-slot" aria-hidden="true"></span>
       <span class="logo">BLUNDERLESS</span>
-      <span class="brand-tag">v2.1</span>
-    </div>
+      <span class="brand-tag">v3.0</span>
+    </button>
+
+    <nav class="primary-nav" aria-label="Main navigation">
+      <button class="nav-view-btn active" data-view="home">⌂ HOME</button>
+      <button class="nav-view-btn" data-view="analyze">♟ ANALYZE</button>
+      <button class="nav-view-btn" data-view="games">▤ MY GAMES</button>
+      <button class="nav-view-btn" data-view="insights">◈ INSIGHTS</button>
+    </nav>
+
     <div class="topbar-controls">
       <div class="quick-user-box">
-        <input id="chesscom-input" class="text-input" type="text" placeholder="chess.com username" autocomplete="off" />
-        <button id="chesscom-btn" class="btn btn-secondary" title="Fetch last 5 games from Chess.com">FETCH GAMES</button>
+        <input id="chesscom-input" class="text-input" type="text" placeholder="quick chess.com..." autocomplete="off" />
+        <button id="chesscom-btn" class="btn btn-secondary" title="Quick fetch recent games to Board">FETCH</button>
       </div>
+      <button id="account-pill-btn" class="account-pill-btn" title="Account, Google Sign-In, Chess.com & Lichess">
+        <span id="account-pill-avatar" class="account-pill-avatar">?</span>
+        <span id="account-pill-name">SIGN IN</span>
+        <span class="account-pill-caret">▾</span>
+      </button>
     </div>
   </header>
 
-  <main class="workspace">
+  <!-- ══ VIEW 0: HOME (Landing Page + Live ELO Tracker & Metrics Hub) ══ -->
+  <section id="view-home" class="app-view view-scroll active" aria-label="Home and ELO Tracker">
+    <div class="page-shell">
+      <!-- Landing Hero / Onboarding (collapses cleanly once accounts are linked) -->
+      <div id="home-hero-card" class="home-hero-card">
+        <div class="hero-left">
+          <div id="home-hero-logo" class="home-hero-logo" aria-hidden="true"></div>
+          <div class="hero-copy">
+            <div class="hero-kicker">STOCKFISH + STRUCTURED FEATURES + CHESTER AI COACH</div>
+            <h1 class="hero-headline">Stop repeating the same blunders.</h1>
+            <p class="hero-sub">
+              Track your Chess.com &amp; Lichess ELO in one place, filter 100+ games by Brilliants or accuracy,
+              and get grounded Stockfish stage-by-stage coaching with zero hallucinated tactics.
+            </p>
+            <div class="hero-cta-row">
+              <button id="hero-google-btn" class="btn btn-primary">CONTINUE WITH GOOGLE</button>
+              <button id="hero-account-btn" class="btn btn-secondary">CONNECT CHESS.COM / LICHESS</button>
+              <button id="hero-sample-btn" class="btn btn-text">TRY SAMPLE GAME →</button>
+            </div>
+          </div>
+        </div>
+        <div class="hero-quick-connect">
+          <div class="qc-title">QUICK CONNECT ACCOUNT</div>
+          <div class="qc-row">
+            <select id="qc-platform" class="filter-select">
+              <option value="chesscom">Chess.com</option>
+              <option value="lichess">Lichess</option>
+            </select>
+            <input id="qc-username" class="text-input" type="text" placeholder="Enter username..." autocomplete="off" />
+            <button id="qc-link-btn" class="btn btn-primary btn-sm">LINK &amp; SYNC</button>
+          </div>
+          <div id="qc-status" class="qc-status">Links your public profile, live ELO history &amp; last 60 games locally.</div>
+        </div>
+      </div>
+
+      <!-- Signed-In Command Center: Live ELO Tracker & Metrics -->
+      <div id="home-dashboard" class="home-dashboard hidden">
+        <div class="section-bar">
+          <div>
+            <h2 class="section-title" id="home-welcome-title">ELO TRACKER &amp; METRICS</h2>
+            <div class="section-sub" id="home-linked-badges"></div>
+          </div>
+          <div class="section-actions">
+            <button id="home-sync-btn" class="btn btn-secondary btn-sm">↻ SYNC GAMES &amp; ELO</button>
+            <button id="home-go-insights-btn" class="btn btn-primary btn-sm">◈ RUN MULTI-GAME REPORT</button>
+          </div>
+        </div>
+
+        <!-- Live Platform Rating Cards -->
+        <div id="home-elo-cards" class="elo-cards-grid"></div>
+
+        <!-- Interactive ELO Rating History Chart -->
+        <div class="editorial-card">
+          <div class="card-head-row">
+            <div class="card-head-left">
+              <span class="card-head-title">ELO PROGRESSION</span>
+              <span id="home-elo-current" class="elo-hero-num">—</span>
+              <span id="home-elo-delta" class="elo-delta-pill"></span>
+            </div>
+            <div class="pill-groups">
+              <div class="pill-group" id="home-chart-platform-pills">
+                <button class="pill-btn active" data-val="all">All</button>
+                <button class="pill-btn" data-val="chesscom">Chess.com</button>
+                <button class="pill-btn" data-val="lichess">Lichess</button>
+              </div>
+              <div class="pill-group" id="home-chart-tc-pills">
+                <button class="pill-btn active" data-val="rapid">Rapid</button>
+                <button class="pill-btn" data-val="blitz">Blitz</button>
+                <button class="pill-btn" data-val="bullet">Bullet</button>
+              </div>
+            </div>
+          </div>
+          <div id="home-elo-chart-wrap" class="svg-chart-wrap"></div>
+        </div>
+
+        <!-- Snapshot Metrics Strip -->
+        <div id="home-metrics-strip" class="kpi-strip-grid"></div>
+
+        <!-- Bottom 2-Col: Recent Games + Recent Saved Reports -->
+        <div class="home-two-col">
+          <div class="editorial-card">
+            <div class="card-head-row">
+              <span class="card-head-title">RECENT GAMES</span>
+              <button id="home-see-all-games" class="btn btn-text btn-sm">VIEW ALL →</button>
+            </div>
+            <div id="home-recent-games" class="compact-list"></div>
+          </div>
+          <div class="editorial-card">
+            <div class="card-head-row">
+              <span class="card-head-title">LAST SAVED REPORTS</span>
+              <button id="home-see-all-reports" class="btn btn-text btn-sm">INSIGHTS →</button>
+            </div>
+            <div id="home-saved-reports" class="compact-list"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ VIEW 1: ANALYZE (Board + Eval Bar + Chester + Right Sidebar) ══ -->
+  <main id="view-analyze" class="workspace app-view hidden">
 
     <!-- ══ Left Stage: Board Assembly (Left) + Floating Chester Coach (Right) ══ -->
     <section class="left-stage">
@@ -280,6 +393,37 @@
               <span class="review-vs-col"></span>
               <span class="review-acc-pill review-acc-black" id="rev-b-acpl">—</span>
             </div>
+
+            <!-- Coach's Game Report: Stage Breakdown, Tactics, Strategy & Next-Game Tips -->
+            <section id="coach-report-section" class="coach-report-section hidden" aria-label="Coach's Game Report">
+              <div class="report-header-bar">
+                <div class="report-title-group">
+                  <span class="report-title">COACH'S GAME REPORT</span>
+                  <span id="report-tone-pill" class="report-tone-pill">INSTRUCTIVE</span>
+                </div>
+                <div class="report-side-toggle" role="tablist" aria-label="Report player perspective">
+                  <button id="report-btn-white" class="report-side-btn active" data-side="white">White</button>
+                  <button id="report-btn-black" class="report-side-btn" data-side="black">Black</button>
+                </div>
+              </div>
+
+              <!-- Overall Game Summary -->
+              <div class="report-overall-card">
+                <p id="report-overall-text" class="report-overall-text"></p>
+              </div>
+
+              <!-- Stage-by-Stage Breakdown (Opening / Middlegame / Endgame) -->
+              <div class="report-subhead">GAME STAGES</div>
+              <div id="report-stages-list" class="report-stages-list"></div>
+
+              <!-- Tactics & Strategy Breakdown -->
+              <div class="report-subhead">TACTICS &amp; STRATEGY</div>
+              <div id="report-skills-grid" class="report-skills-grid"></div>
+
+              <!-- Suggested Tips for Next Game -->
+              <div class="report-subhead">TIPS FOR YOUR NEXT GAME</div>
+              <ol id="report-tips-list" class="report-tips-list"></ol>
+            </section>
           </div>
         </div>
       </div>
@@ -407,9 +551,332 @@
 
   </main>
 
+  <!-- ══ VIEW 2: MY GAMES (Unified 50-200+ Filterable Library) ══ -->
+  <section id="view-games" class="app-view view-scroll hidden" aria-label="My Games Library">
+    <div class="page-shell">
+      <div class="section-bar">
+        <div>
+          <h2 class="section-title">MY GAMES LIBRARY</h2>
+          <div class="section-sub" id="games-lib-summary">Sync Chess.com or Lichess to browse, filter, and sort all your games.</div>
+        </div>
+        <div class="section-actions">
+          <button id="lib-sync-btn" class="btn btn-secondary btn-sm">↻ SYNC 80 GAMES</button>
+          <button id="lib-batch-btn" class="btn btn-primary btn-sm">★ ANALYSE UNANALYSED (20)</button>
+        </div>
+      </div>
+
+      <!-- Filter & Sort Bar -->
+      <div class="editorial-card filter-bar-card">
+        <div class="filter-grid">
+          <label class="filter-item">
+            <span>PLATFORM</span>
+            <select id="flt-platform" class="filter-select">
+              <option value="all">All Platforms</option>
+              <option value="chesscom">Chess.com</option>
+              <option value="lichess">Lichess</option>
+            </select>
+          </label>
+          <label class="filter-item">
+            <span>TIME CONTROL</span>
+            <select id="flt-tc" class="filter-select">
+              <option value="all">All Modes</option>
+              <option value="rapid">Rapid</option>
+              <option value="blitz">Blitz</option>
+              <option value="bullet">Bullet</option>
+              <option value="daily">Daily</option>
+            </select>
+          </label>
+          <label class="filter-item">
+            <span>RESULT</span>
+            <select id="flt-result" class="filter-select">
+              <option value="all">All Results</option>
+              <option value="win">Wins</option>
+              <option value="draw">Draws</option>
+              <option value="loss">Losses</option>
+            </select>
+          </label>
+          <label class="filter-item">
+            <span>COLOR</span>
+            <select id="flt-color" class="filter-select">
+              <option value="all">White &amp; Black</option>
+              <option value="white">White</option>
+              <option value="black">Black</option>
+            </select>
+          </label>
+          <label class="filter-item">
+            <span>STATUS</span>
+            <select id="flt-analysed" class="filter-select">
+              <option value="all">All Games</option>
+              <option value="yes">Analysed Only</option>
+              <option value="no">Unanalysed Only</option>
+            </select>
+          </label>
+          <label class="filter-item">
+            <span>SORT BY</span>
+            <select id="flt-sort" class="filter-select">
+              <option value="newest">Newest First</option>
+              <option value="brilliants">Most Brilliants (!!)</option>
+              <option value="accuracy_desc">Highest Accuracy</option>
+              <option value="accuracy_asc">Lowest Accuracy</option>
+              <option value="blunders">Most Blunders (??)</option>
+              <option value="upset">Biggest Upset</option>
+              <option value="opp_rating">Highest Opponent ELO</option>
+            </select>
+          </label>
+          <label class="filter-item filter-search-item">
+            <span>SEARCH OPPONENT / OPENING</span>
+            <input id="flt-search" class="text-input" type="text" placeholder="e.g. Pirc, Italian, opponent..." />
+          </label>
+        </div>
+      </div>
+
+      <!-- Games Library Table -->
+      <div class="editorial-card table-card">
+        <div id="lib-empty" class="empty-state">No games loaded yet. Connect Chess.com or Lichess in Account settings.</div>
+        <div class="lib-table-wrap">
+          <table id="lib-games-table" class="lib-table hidden">
+            <thead>
+              <tr>
+                <th>Date / Mode</th>
+                <th>Matchup</th>
+                <th>Result</th>
+                <th>Opening</th>
+                <th>Accuracy</th>
+                <th>Highlights</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="lib-games-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ VIEW 3: INSIGHTS (ChessRank-Inspired Vital Multi-Game Report) ══ -->
+  <section id="view-insights" class="app-view view-scroll hidden" aria-label="Multi-Game Insights Report">
+    <div class="page-shell">
+      <div class="section-bar">
+        <div>
+          <h2 class="section-title">MULTI-GAME REPORT &amp; INSIGHTS</h2>
+          <div class="section-sub">Your performance over a time window—analysed by Stockfish &amp; cached locally.</div>
+        </div>
+      </div>
+
+      <!-- Report Builder Control Card -->
+      <div class="editorial-card report-builder-card">
+        <div class="builder-row">
+          <div class="builder-group">
+            <span class="builder-lbl">TIME CONTROL</span>
+            <div class="pill-group" id="ins-tc-pills">
+              <button class="pill-btn" data-val="bullet">Bullet</button>
+              <button class="pill-btn" data-val="blitz">Blitz</button>
+              <button class="pill-btn active" data-val="rapid">Rapid</button>
+              <button class="pill-btn" data-val="daily">Daily</button>
+              <button class="pill-btn" data-val="all">All</button>
+            </div>
+          </div>
+          <div class="builder-group">
+            <span class="builder-lbl">PERIOD</span>
+            <div class="pill-group" id="ins-period-pills">
+              <button class="pill-btn" data-val="7">7 days</button>
+              <button class="pill-btn" data-val="14">14 days</button>
+              <button class="pill-btn active" data-val="30">30 days</button>
+              <button class="pill-btn" data-val="90">90 days</button>
+              <button class="pill-btn" data-val="0">All time</button>
+            </div>
+          </div>
+          <div class="builder-group">
+            <span class="builder-lbl">PLATFORM</span>
+            <div class="pill-group" id="ins-platform-pills">
+              <button class="pill-btn active" data-val="all">All</button>
+              <button class="pill-btn" data-val="chesscom">Chess.com</button>
+              <button class="pill-btn" data-val="lichess">Lichess</button>
+            </div>
+          </div>
+          <div class="builder-group">
+            <span class="builder-lbl">MAX GAMES</span>
+            <select id="ins-max-games" class="filter-select">
+              <option value="20">20 games</option>
+              <option value="40" selected>40 games</option>
+              <option value="80">80 games</option>
+              <option value="120">120 games</option>
+            </select>
+          </div>
+          <button id="ins-analyze-btn" class="btn btn-primary">ANALYZE RAPID</button>
+        </div>
+
+        <!-- Live Batch Analysis Progress Bar -->
+        <div id="ins-progress-box" class="batch-progress-box hidden">
+          <div class="batch-progress-top">
+            <span id="ins-progress-label" class="batch-progress-label">Preparing Stockfish batch...</span>
+            <div class="batch-progress-meta">
+              <span id="ins-progress-stats">0 / 0</span>
+              <button id="ins-cancel-btn" class="btn btn-sm btn-secondary">CANCEL</button>
+            </div>
+          </div>
+          <div class="batch-bar-track">
+            <div id="ins-progress-fill" class="batch-bar-fill" style="width: 0%"></div>
+          </div>
+        </div>
+
+        <!-- Saved Instant Reports List -->
+        <div class="saved-reports-wrap">
+          <div class="builder-lbl">YOUR SAVED REPORTS (OPEN INSTANTLY)</div>
+          <div id="ins-saved-list" class="saved-reports-list">
+            <div class="empty-inline">No saved reports yet. Click Analyze above to build your first multi-game report.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Rendered Multi-Game Report Canvas -->
+      <div id="ins-report-body" class="ins-report-body hidden">
+        <!-- 1. Chester Verdict Banner -->
+        <div class="editorial-card chester-verdict-card">
+          <div class="verdict-badge">CHESTER · SCOUTING VERDICT</div>
+          <p id="ins-verdict-text" class="verdict-text"></p>
+        </div>
+
+        <!-- 2. Hero ELO Progression Chart -->
+        <div class="editorial-card">
+          <div class="card-head-row">
+            <div class="card-head-left">
+              <span id="ins-elo-title" class="card-head-title">RAPID · 30 DAYS</span>
+            </div>
+            <div class="card-head-left">
+              <span id="ins-elo-current" class="elo-hero-num">—</span>
+              <span id="ins-elo-delta" class="elo-delta-pill"></span>
+            </div>
+          </div>
+          <div id="ins-elo-chart" class="svg-chart-wrap"></div>
+        </div>
+
+        <!-- 3. 10-Tile KPI Grid -->
+        <div id="ins-kpi-grid" class="ins-kpi-grid"></div>
+
+        <!-- 4. 4-Tile Highlights / Achievements Strip -->
+        <div class="report-subhead-lg">HIGHLIGHTS &amp; ACHIEVEMENTS</div>
+        <div id="ins-highlights-grid" class="highlights-grid"></div>
+
+        <!-- 5. Charts Row: Accuracy Over Time + Results Donut + Move Quality Donut -->
+        <div class="charts-three-col">
+          <div class="editorial-card">
+            <div class="card-head-title">ACCURACY OVER TIME</div>
+            <div id="ins-acc-chart" class="svg-chart-wrap"></div>
+          </div>
+          <div class="editorial-card">
+            <div class="card-head-title">RESULTS</div>
+            <div id="ins-results-donut" class="donut-wrap"></div>
+          </div>
+          <div class="editorial-card">
+            <div class="card-head-title">MOVE QUALITY</div>
+            <div id="ins-quality-donut" class="donut-wrap"></div>
+          </div>
+        </div>
+
+        <!-- 6. Phase Accuracy + Conversion & Tactics + Blunder Direction -->
+        <div class="charts-two-col">
+          <div class="editorial-card">
+            <div class="card-head-title">ACCURACY BY GAME PHASE</div>
+            <div id="ins-phase-bars" class="phase-bars-wrap"></div>
+            <div class="conv-tac-row" id="ins-conv-tac"></div>
+          </div>
+          <div class="editorial-card">
+            <div class="card-head-title">BLUNDER DIRECTION &amp; WHERE MISTAKES HAPPEN</div>
+            <div id="ins-blunder-dir" class="blunder-dir-wrap"></div>
+            <div id="ins-mistakes-matrix" class="mistakes-matrix"></div>
+          </div>
+        </div>
+
+        <!-- 7. How Your Games End -->
+        <div class="editorial-card">
+          <div class="card-head-title">HOW YOUR GAMES END</div>
+          <div id="ins-endings-grid" class="endings-grid"></div>
+        </div>
+
+        <!-- 8. Openings Repertoire Split (As White vs As Black) -->
+        <div class="editorial-card">
+          <div class="card-head-title">OPENINGS (WIN RATE BY COLOR)</div>
+          <div id="ins-openings-grid" class="openings-two-col"></div>
+        </div>
+
+        <!-- 9. Best Moments Showcase (Clickable Brilliants & Great Moves) -->
+        <div id="ins-moments-card" class="editorial-card hidden">
+          <div class="card-head-title">TOP BRILLIANTS &amp; STANDOUT MOVES (CLICK TO JUMP)</div>
+          <div id="ins-moments-grid" class="moments-grid"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ Account & Platform Connections Modal ══ -->
+  <div id="account-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-label="Account and Connections">
+    <div class="modal-card">
+      <div class="modal-header">
+        <span class="modal-title">ACCOUNT &amp; CHESS CONNECTIONS</span>
+        <button id="modal-close-btn" class="modal-close-btn" aria-label="Close">✕</button>
+      </div>
+      <div class="modal-body">
+        <!-- Auth Section -->
+        <div class="modal-section">
+          <div class="modal-section-title">1. BLUNDERLESS SIGN-IN</div>
+          <div id="modal-signed-out">
+            <button id="modal-google-btn" class="btn btn-primary modal-full-btn">CONTINUE WITH GOOGLE</button>
+            <div id="modal-google-hint" class="modal-hint hidden">
+              Google OAuth is ready—just set <code>GOOGLE_CLIENT_ID</code> and <code>GOOGLE_CLIENT_SECRET</code> env vars. Meanwhile, sign in locally below:
+            </div>
+            <div class="modal-divider">OR LOCAL PROFILE</div>
+            <div class="modal-inline-row">
+              <input id="modal-local-name" class="text-input" type="text" placeholder="Your display name..." />
+              <button id="modal-local-btn" class="btn btn-secondary btn-sm">SIGN IN</button>
+            </div>
+          </div>
+          <div id="modal-signed-in" class="hidden">
+            <div class="signed-in-row">
+              <div>
+                <div id="modal-user-name" class="signed-in-name">—</div>
+                <div id="modal-user-sub" class="signed-in-sub">—</div>
+              </div>
+              <button id="modal-logout-btn" class="btn btn-secondary btn-sm">SIGN OUT</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Chess.com Link -->
+        <div class="modal-section">
+          <div class="modal-section-title">2. CHESS.COM ACCOUNT</div>
+          <div id="modal-cc-linked" class="linked-status-row hidden">
+            <span id="modal-cc-label" class="linked-handle"></span>
+            <button id="modal-cc-unlink" class="btn btn-text btn-sm">Unlink</button>
+          </div>
+          <div class="modal-inline-row">
+            <input id="modal-cc-input" class="text-input" type="text" placeholder="Chess.com username..." />
+            <button id="modal-cc-link-btn" class="btn btn-primary btn-sm">LINK &amp; SYNC</button>
+          </div>
+        </div>
+
+        <!-- Lichess Link -->
+        <div class="modal-section">
+          <div class="modal-section-title">3. LICHESS ACCOUNT</div>
+          <div id="modal-li-linked" class="linked-status-row hidden">
+            <span id="modal-li-label" class="linked-handle"></span>
+            <button id="modal-li-unlink" class="btn btn-text btn-sm">Unlink</button>
+          </div>
+          <div class="modal-inline-row">
+            <input id="modal-li-input" class="text-input" type="text" placeholder="Lichess username..." />
+            <button id="modal-li-link-btn" class="btn btn-primary btn-sm">LINK &amp; SYNC</button>
+          </div>
+        </div>
+
+        <div id="modal-status" class="modal-status"></div>
+      </div>
+    </div>
+  </div>
+
   <script src="/static/pieces.js?v=11"></script>
-  <script src="/static/app.js?v=20"></script>
-  <script src="/static/coach.js?v=20"></script>
+  <script src="/static/app.js?v=25"></script>
+  <script src="/static/coach.js?v=23"></script>
+  <script src="/static/platform.js?v=25"></script>
 </body>
 
 </html>
