@@ -1892,12 +1892,16 @@ body {
   50% { transform: translateY(-7px); }
 }
 
-/* Modular Expression Layer Visibility */
+/* Modular Expression Layer Visibility (9 distinct expressions) */
 .knight-pixel-svg .expr-layer {
   display: none;
 }
 
 .knight-coach-stage[data-state="deadpan"] .expr-deadpan,
+.knight-coach-stage[data-state="smug"] .expr-smug,
+.knight-coach-stage[data-state="suspicious"] .expr-suspicious,
+.knight-coach-stage[data-state="annoyed"] .expr-annoyed,
+.knight-coach-stage[data-state="checkmate_hype"] .expr-checkmate_hype,
 .knight-coach-stage[data-state="brilliant_shock"] .expr-brilliant_shock,
 .knight-coach-stage[data-state="flabbergasted"] .expr-flabbergasted,
 .knight-coach-stage[data-state="manic_meltdown"] .expr-manic_meltdown,
@@ -1982,6 +1986,26 @@ body {
 
 .knight-anim-snap {
   animation: knightSnapUpright 0.16s ease-out 1 !important;
+}
+
+.knight-anim-nod {
+  animation: knightSmugNod 0.34s ease-in-out 1 !important;
+}
+
+@keyframes knightSmugNod {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  40% { transform: translateY(3px) rotate(3deg); }
+  75% { transform: translateY(-3px) rotate(-2deg); }
+}
+
+.knight-anim-glare {
+  animation: knightAnnoyedGlare 0.28s ease-out 1 !important;
+}
+
+@keyframes knightAnnoyedGlare {
+  0%, 100% { transform: translateX(0) rotate(0deg); }
+  35% { transform: translateX(-2px) rotate(-3deg); }
+  70% { transform: translateX(1px) rotate(1deg); }
 }
 
 @keyframes knightSnapUpright {
