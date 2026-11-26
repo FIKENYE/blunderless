@@ -19,7 +19,7 @@
   <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
   <script src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"></script>
 
-  <link rel="stylesheet" href="/static/styles.css?v=18" />
+  <link rel="stylesheet" href="/static/styles.css?v=20" />
 </head>
 
 <body>
@@ -39,24 +39,8 @@
 
   <main class="workspace">
 
-    <!-- ══ Left Stage: Floating Pixel Knight Coach + Centered Board Assembly ══ -->
+    <!-- ══ Left Stage: Board Assembly (Left) + Floating Chester Coach (Right) ══ -->
     <section class="left-stage">
-      <!-- Floating Pixel-Art Knight Mascot & Retro Speech Bubble -->
-      <aside id="knight-coach-stage" class="knight-coach-stage" data-state="deadpan" aria-label="Pixel Knight Coach">
-        <div class="knight-bubble" id="knight-bubble">
-          <div class="knight-bubble-header">
-            <span id="knight-mood-label" class="knight-mood-label">KNIGHT · UNIMPRESSED</span>
-            <div class="knight-bubble-actions">
-              <button id="btn-coach-explain" class="knight-mini-btn" title="Explain current move">[EXPLAIN]</button>
-              <button id="btn-coach-voice" class="knight-mini-btn" title="Toggle Coach Audio">[MUTE]</button>
-            </div>
-          </div>
-          <p id="knight-speech-text" class="knight-speech-text"><span id="knight-typed"></span><span class="knight-cursor">█</span></p>
-          <div class="knight-bubble-tail" aria-hidden="true"></div>
-        </div>
-        <button id="knight-mascot-btn" class="knight-mascot-btn" title="Click Knight for a fresh roast or explanation"></button>
-      </aside>
-
       <div class="board-container">
         
         <!-- Eval Bar: spans exact height of the 8 ranks, flush to the left of the board -->
@@ -119,6 +103,22 @@
         </div>
 
       </div>
+
+      <!-- Floating Pixel-Art Knight Coach ("Chester") on the Right of the Board -->
+      <aside id="knight-coach-stage" class="knight-coach-stage" data-state="deadpan" aria-label="Chester AI Coach">
+        <div class="knight-bubble" id="knight-bubble">
+          <div class="knight-bubble-header">
+            <span id="knight-mood-label" class="knight-mood-label">CHESTER · DEADPAN</span>
+            <div class="knight-bubble-actions">
+              <button id="btn-coach-explain" class="knight-mini-btn" title="Why was the best move better?">[EXPLAIN]</button>
+              <button id="btn-coach-voice" class="knight-mini-btn" title="Toggle Chester Audio">[MUTE]</button>
+            </div>
+          </div>
+          <p id="knight-speech-text" class="knight-speech-text"><span id="knight-typed"></span><span class="knight-cursor">█</span></p>
+          <div class="knight-bubble-tail" aria-hidden="true"></div>
+        </div>
+        <button id="knight-mascot-btn" class="knight-mascot-btn" title="Click Chester to explain why the best move is stronger"></button>
+      </aside>
     </section>
 
     <!-- ══ Right Analysis Sidebar (2-Column Grid Item) ══ -->
@@ -408,8 +408,8 @@
   </main>
 
   <script src="/static/pieces.js?v=11"></script>
-  <script src="/static/app.js?v=17"></script>
-  <script src="/static/coach.js?v=18"></script>
+  <script src="/static/app.js?v=20"></script>
+  <script src="/static/coach.js?v=20"></script>
 </body>
 
 </html>

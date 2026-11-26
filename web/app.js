@@ -123,6 +123,44 @@ class WoodenClackEngine {
 
     noiseSrc.start(now);
     noiseSrc.stop(now + 0.015);
+
+    // ── Layer 4: Mechanical Keyboard PBT Stem Clack (2500Hz crisp transient) ──
+    const clackBuf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 0.007), ctx.sampleRate);
+    const clackData = clackBuf.getChannelData(0);
+    for (let i = 0; i < clackData.length; i++) {
+      const env = Math.pow(1 - i / clackData.length, 2.8);
+      clackData[i] = (Math.random() * 2 - 1) * env;
+    }
+    const clackSrc = ctx.createBufferSource();
+    clackSrc.buffer = clackBuf;
+
+    const clackFilter = ctx.createBiquadFilter();
+    clackFilter.type = 'bandpass';
+    clackFilter.frequency.setValueAtTime(2520 * jitter, now);
+    clackFilter.Q.setValueAtTime(3.2, now);
+
+    const clackGain = ctx.createGain();
+    clackGain.gain.setValueAtTime(0.62 * vol, now);
+    clackGain.gain.exponentialRampToValueAtTime(0.001, now + 0.006);
+
+    clackSrc.connect(clackFilter);
+    clackFilter.connect(clackGain);
+    clackGain.connect(this._compressor);
+
+    clackSrc.start(now);
+    clackSrc.stop(now + 0.0075);
+
+    // ── Layer 5: Sharp Keycap Top-Out Click (3400Hz 3.5ms impulse) ──
+    const clickOsc = ctx.createOscillator();
+    const clickGain = ctx.createGain();
+    clickOsc.type = 'sine';
+    clickOsc.frequency.setValueAtTime(3400 * jitter, now);
+    clickGain.gain.setValueAtTime(0.24 * vol, now);
+    clickGain.gain.exponentialRampToValueAtTime(0.001, now + 0.0035);
+    clickOsc.connect(clickGain);
+    clickGain.connect(this._compressor);
+    clickOsc.start(now);
+    clickOsc.stop(now + 0.004);
   }
 
   /** Soft wooden chime for check & checkmate */
@@ -218,6 +256,11 @@ const state = {
     bestMoveSan: null,
     autoReplyTimer: null,
   },
+  explainDemo: {
+    active: false,
+    originPly: 0,
+    timers: [],
+  },
   headers: {
     white: 'White', black: 'Black',
     white_elo: '', black_elo: '',
@@ -248,13 +291,17 @@ const statusMsg = $('status-msg');
 const analyseBtn = $('analyse-btn');
 const gamesList = $('games-list');
 
+// Crisp monochrome white-out inline SVGs (no yellow OS emojis)
+const THUMB_SVG = '<svg class="clf-svg-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 7.2 8.2 2.4c.4-.7 1.4-.4 1.4.4v3h3.3c.9 0 1.5.8 1.3 1.7l-1 4.6c-.2.7-.8 1.2-1.5 1.2H6V7.2h-.5zM2 7h2.6v6.3H2V7z"/></svg>';
+const BOOK_SVG = '<svg class="clf-svg-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 3.2c1.8-.4 4-.2 5.4.8v8.8c-1.4-.9-3.6-1.1-5.4-.7V3.2zm12 0c-1.8-.4-4-.2-5.4.8v8.8c1.4-.9 3.6-1.1 5.4-.7V3.2z"/></svg>';
+
 const CLF_META = {
   brilliant: { glyph: '!!', cls: 'glyph-brilliant', badgeCls: 'clf-brilliant', title: 'Brilliant' },
   great: { glyph: '!', cls: 'glyph-great', badgeCls: 'clf-great', title: 'Great' },
   best: { glyph: '★', cls: 'glyph-best', badgeCls: 'clf-best', title: 'Best' },
-  excellent: { glyph: '👍', cls: 'glyph-excellent', badgeCls: 'clf-excellent', title: 'Excellent' },
-  good: { glyph: '', cls: 'glyph-good', badgeCls: 'clf-good', title: 'Good' },
-  book: { glyph: '📖', cls: 'glyph-book', badgeCls: 'clf-book', title: 'Book' },
+  excellent: { glyph: THUMB_SVG, cls: 'glyph-excellent', badgeCls: 'clf-excellent', title: 'Excellent' },
+  good: { glyph: '✓', cls: 'glyph-good', badgeCls: 'clf-good', title: 'Good' },
+  book: { glyph: BOOK_SVG, cls: 'glyph-book', badgeCls: 'clf-book', title: 'Book' },
   inaccuracy: { glyph: '?!', cls: 'glyph-inaccuracy', badgeCls: 'clf-inaccuracy', title: 'Inaccuracy' },
   mistake: { glyph: '?', cls: 'glyph-mistake', badgeCls: 'clf-mistake', title: 'Mistake' },
   miss: { glyph: '✕', cls: 'glyph-miss', badgeCls: 'clf-miss', title: 'Miss' },
@@ -577,7 +624,7 @@ function initBoard() {
 
     const coachEl = $('knight-coach-stage');
     const isDesktopSide = window.innerWidth >= 1220 && coachEl;
-    const coachReserveW = isDesktopSide ? Math.min(260, coachEl.offsetWidth + 24) : 0;
+    const coachReserveW = isDesktopSide ? Math.min(290, coachEl.offsetWidth + 28) : 0;
     const coachReserveH = (!isDesktopSide && coachEl) ? coachEl.offsetHeight + 16 : 0;
 
     // Available space accounting for padding, player bars, and floating knight coach
@@ -902,23 +949,117 @@ function highlightLastMove(fromSq, toSq, classification) {
   });
   _lastHighlightSquares = [fromSq, toSq];
 
-  // Render circular classification badge on destination square
-  if (classification && classification !== 'good') {
+  // Render circular classification badge on destination square for EVERY classified move
+  if (classification) {
     const toSquareEl = $('board').querySelector(`[data-square="${toSq}"]`);
     if (toSquareEl) {
       const meta = CLF_META[classification];
       if (meta && meta.glyph) {
         const badge = document.createElement('div');
         badge.className = `square-badge ${meta.badgeCls}`;
-        badge.textContent = meta.glyph;
+        badge.innerHTML = meta.glyph;
         toSquareEl.appendChild(badge);
       }
     }
   }
 }
 
+function cancelExplainDemo() {
+  if (!state.explainDemo.active) return;
+  for (const tid of state.explainDemo.timers) {
+    clearTimeout(tid);
+  }
+  state.explainDemo.timers = [];
+  state.explainDemo.active = false;
+}
+
+function playExplainDemo(bestLineUci) {
+  if (!Array.isArray(bestLineUci) || bestLineUci.length === 0) return;
+  if (state.subgame.active) return;
+
+  const firstUci = bestLineUci[0];
+  if (!firstUci || firstUci.length < 4) return;
+
+  // If the user already played this exact best move, show the follow-up from current ply
+  const curMove = state.plyIndex > 0 ? state.moves[state.plyIndex - 1] : null;
+  const alreadyPlayedBest = curMove && curMove.uci === firstUci;
+  const branchPly = (state.plyIndex === 0 || alreadyPlayedBest) ? state.plyIndex : state.plyIndex - 1;
+
+  cancelExplainDemo();
+  clearMoveSelection();
+  state.explainDemo = {
+    active: true,
+    originPly: state.plyIndex,
+    timers: [],
+  };
+
+  const demoGame = buildGameAtPly(branchPly);
+
+  if (!alreadyPlayedBest) {
+    // Beat 1 (0ms): Rewind to position before the mistake and highlight best move arrow
+    state.board.position(demoGame.fen(), true);
+    highlightLastMove(null, null, null);
+    state.showBestMove = true;
+    updateBestMoveUI();
+    renderBoardArrows();
+
+    // Beat 2 (550ms): Play the Best Move on the board
+    const t1 = setTimeout(() => {
+      if (!state.explainDemo.active) return;
+      const m1 = demoGame.move({
+        from: firstUci.slice(0, 2),
+        to: firstUci.slice(2, 4),
+        promotion: firstUci.slice(4, 5) || 'q',
+      });
+      if (!m1) return;
+      state.board.position(demoGame.fen(), true);
+      highlightLastMove(m1.from, m1.to, 'best');
+      playMoveSound({ san: m1.san }, demoGame);
+      renderBoardArrows();
+
+      // Beat 3 (1350ms total): Play opponent's best / most likely reply
+      const replyUci = bestLineUci[1];
+      if (replyUci && replyUci.length >= 4) {
+        const t2 = setTimeout(() => {
+          if (!state.explainDemo.active) return;
+          const m2 = demoGame.move({
+            from: replyUci.slice(0, 2),
+            to: replyUci.slice(2, 4),
+            promotion: replyUci.slice(4, 5) || 'q',
+          });
+          if (!m2) return;
+          state.board.position(demoGame.fen(), true);
+          highlightLastMove(m2.from, m2.to, null);
+          playMoveSound({ san: m2.san }, demoGame);
+        }, 800);
+        state.explainDemo.timers.push(t2);
+      }
+    }, 550);
+    state.explainDemo.timers.push(t1);
+  } else if (bestLineUci[1] && bestLineUci[1].length >= 4) {
+    // Already played best move -> show opponent's most likely reply after 450ms
+    const replyUci = bestLineUci[1];
+    const t1 = setTimeout(() => {
+      if (!state.explainDemo.active) return;
+      const m2 = demoGame.move({
+        from: replyUci.slice(0, 2),
+        to: replyUci.slice(2, 4),
+        promotion: replyUci.slice(4, 5) || 'q',
+      });
+      if (!m2) return;
+      state.board.position(demoGame.fen(), true);
+      highlightLastMove(m2.from, m2.to, null);
+      playMoveSound({ san: m2.san }, demoGame);
+    }, 450);
+    state.explainDemo.timers.push(t1);
+  }
+}
+
 // ── Navigation ──────────────────────────────────────────────
 function goToPly(ply) {
+  if (state.explainDemo.active) {
+    cancelExplainDemo();
+  }
   if (state.subgame.active) {
     exitSubgame(true);
   }
@@ -1239,9 +1380,9 @@ function renderReviewTab(movesData, summary = null) {
     { key: 'brilliant', label: 'Brilliant', icon: '!!', cls: 'clf-brilliant' },
     { key: 'great', label: 'Great', icon: '!', cls: 'clf-great' },
     { key: 'best', label: 'Best', icon: '★', cls: 'clf-best' },
-    { key: 'excellent', label: 'Excellent', icon: '👍', cls: 'clf-excellent' },
+    { key: 'excellent', label: 'Excellent', icon: THUMB_SVG, cls: 'clf-excellent' },
     { key: 'good', label: 'Good', icon: '✓', cls: 'clf-good' },
-    { key: 'book', label: 'Book', icon: '📖', cls: 'clf-book' },
+    { key: 'book', label: 'Book', icon: BOOK_SVG, cls: 'clf-book' },
     { key: 'inaccuracy', label: 'Inaccuracy', icon: '?!', cls: 'clf-inaccuracy' },
     { key: 'mistake', label: 'Mistake', icon: '?', cls: 'clf-mistake' },
     { key: 'miss', label: 'Miss', icon: '✕', cls: 'clf-miss' },
@@ -2119,21 +2260,49 @@ function updateCoachContext(fen, ply, moveData) {
     epl = 0;
   }
 
-  // Compute cumulative and consecutive blunders/misses up to this ply
+  // Compute cumulative/recent blunders, clean recovery streak, play quality & intensity
   let totalBlunders = 0;
   let blunderStreak = 0;
   let recentBlunders = 0;
+  let cleanStreak = 0;
+  let eplSum = 0;
+  let gameIntensity = 0;
   const checkLimit = Math.min(ply, state.moves.length);
   for (let i = 0; i < checkLimit; i++) {
-    const c = state.moves[i]?.classification;
+    const m = state.moves[i];
+    const c = m?.classification;
+    const mEpl = typeof m?.epl === 'number' ? m.epl : 0;
+    eplSum += mEpl;
+
     const isBad = c === 'blunder' || c === 'miss';
+    const isClean = c === 'book' || c === 'good' || c === 'excellent' || c === 'best' || c === 'great' || c === 'brilliant';
+
     if (isBad) {
       totalBlunders++;
       blunderStreak++;
+      cleanStreak = 0;
       if (i >= checkLimit - 4) recentBlunders++;
     } else {
       blunderStreak = 0;
+      cleanStreak = isClean ? cleanStreak + 1 : 0;
     }
+
+    if (i >= checkLimit - 6 && (isBad || c === 'mistake' || c === 'brilliant' || (m?.san && m.san.includes('+')))) {
+      gameIntensity++;
+    }
+  }
+
+  const meanEpl = checkLimit > 0 ? Number((eplSum / checkLimit).toFixed(4)) : 0;
+
+  // Dynamic personality tone: starts instructive, rewards good play with analytical respect,
+  // escalates to sarcastic/cocky as game intensifies or mistakes pile up
+  let tone = 'instructive';
+  if (checkLimit <= 8 && totalBlunders === 0) {
+    tone = 'instructive';
+  } else if (meanEpl <= 0.045 && totalBlunders <= 1 && checkLimit >= 6) {
+    tone = 'analytical';
+  } else if (checkLimit >= 14 || gameIntensity >= 2 || totalBlunders >= 2) {
+    tone = 'sarcastic';
   }
 
   const evalFlip =
@@ -2164,6 +2333,10 @@ function updateCoachContext(fen, ply, moveData) {
     totalBlunders,
     blunderStreak,
     recentBlunders,
+    cleanStreak,
+    meanEpl,
+    gameIntensity,
+    tone,
     evalFlip,
     destGrid,
     soundEnabled: sounds.enabled,
@@ -2178,6 +2351,8 @@ window.BlunderlessCoach = {
   getContext: () => window.BlunderlessCoachContext || null,
   toggleBestMove,
   previewBestMove,
+  playExplainDemo,
+  cancelExplainDemo,
 };
 
 function switchDatabase(db) {

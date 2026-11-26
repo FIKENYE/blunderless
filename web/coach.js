@@ -295,15 +295,15 @@
 
   // ── Expanded Sarcastic GothamChess-Style Commentary Bank (4x Lines!) ──
   const MOOD_HEADERS = {
-    deadpan: 'KNIGHT · UNIMPRESSED',
-    smug: 'KNIGHT · NOT BAD, KID',
-    suspicious: 'KNIGHT · HMMM...',
-    annoyed: 'KNIGHT · REALLY?!',
-    checkmate_hype: 'KNIGHT · GOODNIGHT!!',
-    brilliant_shock: 'KNIGHT · WAIT WHAT?!',
-    flabbergasted: 'KNIGHT · MY EYES!!',
-    manic_meltdown: 'KNIGHT · LOSING IT',
-    depressed: 'KNIGHT · GIVEN UP',
+    deadpan: 'CHESTER · DEADPAN',
+    smug: 'CHESTER · NOT BAD',
+    suspicious: 'CHESTER · HMMM...',
+    annoyed: 'CHESTER · REALLY?!',
+    checkmate_hype: 'CHESTER · MATE!!',
+    brilliant_shock: 'CHESTER · WHAT?!',
+    flabbergasted: 'CHESTER · MY EYES',
+    manic_meltdown: 'CHESTER · LOSING IT',
+    depressed: 'CHESTER · GIVEN UP',
   };
 
   const COMMENTARY_BANK = {
@@ -429,6 +429,48 @@
       'Go ahead, fetch your Chess.com games. I\'ve got my sarcasm warmed up.',
       'Ready when you are. Try not to hang your Queen before move 10.',
     ],
+    // Instructive tone (early game / calm learning mode for 600 Elo)
+    instructive_opening: [
+      'Nice start with {moveSan}. Controlling the center and developing pieces early is the golden rule.',
+      'Good theory ({moveSan})! Next priority: get your knights and bishops out, then castle early.',
+      '{moveSan} follows opening principles—fight for the center squares before launching side attacks.',
+      'Clean opening move ({moveSan}). Remember: avoid moving the same piece twice unless there\'s a clear threat.',
+      'Solid book move ({moveSan}). Keep your king safety in mind as the center opens up.',
+    ],
+    instructive_routine: [
+      'Steady move ({moveSan}). Look for ways to activate your least-active piece next.',
+      'Good discipline with {moveSan}—keeping your pieces defended prevents nasty tactics.',
+      '{moveSan} keeps the position balanced. Always check for opponent checks and captures before moving.',
+      'Practical play ({moveSan}). Try to connect your rooks and target weak pawns.',
+      'Nice, calm {moveSan}. When nothing is hanging, improve your worst piece.',
+    ],
+    instructive_mistake: [
+      'Careful with {moveSan}—{bestMoveSan} kept your position safer. Click [EXPLAIN] to see the best reply!',
+      '{moveSan} slips a bit here. Look closely at {bestMoveSan} to see how it fights for control.',
+      'Small hiccup on {moveSan}. Press [EXPLAIN] and I\'ll play out {bestMoveSan} on the board for you.',
+    ],
+    // Analytical tone (when the player's opening & middlegame are genuinely strong!)
+    analytical_routine: [
+      'Clean positional play with {moveSan}. Structure stays intact and your pieces stay coordinated.',
+      'Very composed ({moveSan}). You\'re maintaining the initiative without creating weaknesses.',
+      'Accurate choice ({moveSan})—keeps the pressure steady while denying counterplay.',
+      'Strong middlegame technique with {moveSan}. High-level discipline so far.',
+      'Smart prophylaxis with {moveSan}. You\'re playing well above your rating bracket right now.',
+    ],
+    analytical_strong: [
+      'Sharp calculation ({moveSan})! That directly improves piece activity and tightens your grip.',
+      'Clinical move ({moveSan}). You spotted the key structural/tactical idea right away.',
+      'Impressive accuracy with {moveSan}—this is how you convert an opening advantage.',
+      'Textbook execution ({moveSan}). Keep playing this clean and I\'ll have nothing to roast.',
+    ],
+    comeback_brilliant: [
+      'WAIT A SECOND—BACK FROM THE DEAD WITH {moveSan}?! I TAKE EVERYTHING BACK!! MY COLOUR JUST RETURNED!!',
+      'HOLD EVERYTHING!! FOUR BLUNDERS EARLIER AND NOW YOU DROP A BRILLIANT {moveSan}?! PURE REDEMPTION ARC!!',
+    ],
+    comeback_recover: [
+      'Wait... three clean moves in a row ({moveSan})? Okay, fine—I\'m coming out of greyscale. Don\'t blow it.',
+      'Alright, colour restored. {moveSan} shows signs of life—keep this streak going!',
+    ],
   };
 
   // Non-repeating random-ish picker per bucket so lines never repeat back-to-back
@@ -506,27 +548,33 @@
     const total = ctx.totalBlunders || 0;
     const streak = ctx.blunderStreak || 0;
     const recent = ctx.recentBlunders || 0;
+    const cleanStreak = ctx.cleanStreak || 0;
 
-    // 4+ blunders -> complete greyed-out despair (refuses to hype anything!)
-    if (total >= 4) return 'depressed';
-    // Checkmate hype!
+    // Heroic overrides ALWAYS break out of greyscale despair!
     if (san.includes('#')) return 'checkmate_hype';
-    // Brilliant (!!) -> genuine jaw-drop shock
     if (clf === 'brilliant') return 'brilliant_shock';
+    if (clf === 'great') return 'smug';
+
     // 3 consecutive or mutual chaos -> Lloyd Frontera manic meltdown
     if (streak >= 3 || recent >= 3) return 'manic_meltdown';
+
+    // 4+ cumulative blunders -> depressed ONLY while not recovered (3 clean moves snap Chester back!)
+    if (total >= 4 && cleanStreak < 3 && (recent >= 1 || clf === 'blunder' || clf === 'miss' || clf === 'mistake')) {
+      return 'depressed';
+    }
+
     // 1st-2nd blunder / miss / big eval flip -> flabbergasted
     if (clf === 'blunder' || clf === 'miss' || ctx.evalFlip) return 'flabbergasted';
     // Mistake or inaccuracy -> annoyed glare
     if (clf === 'mistake' || clf === 'inaccuracy') return 'annoyed';
-    // Great move -> smug respect
-    if (clf === 'great') return 'smug';
-    // Excellent / Book -> suspicious squint (alternating with deadpan for variety)
+    // Excellent / Book -> suspicious squint (or analytical deadpan)
     if (clf === 'excellent' || clf === 'book') {
-      return (ctx.ply % 2 === 0) ? 'suspicious' : 'deadpan';
+      return (ctx.tone === 'sarcastic' && ctx.ply % 2 === 0) ? 'suspicious' : 'deadpan';
     }
-    // Best move in a non-trivial position -> occasional smug nod
-    if (clf === 'best' && ctx.ply >= 8 && ctx.ply % 3 === 0) return 'smug';
+    // Best move in a clean/strong game -> smug nod
+    if (clf === 'best' && (ctx.tone === 'analytical' || (ctx.ply >= 8 && ctx.ply % 3 === 0))) {
+      return 'smug';
+    }
 
     return 'deadpan';
   }
@@ -636,19 +684,38 @@
     step();
   }
 
-  function pickCommentaryForState(knightState, ctx) {
+  function pickCommentaryForState(knightState, ctx, prevState = 'deadpan') {
     if (!ctx || !ctx.moveSan) return pickLine('idle', ctx);
+    const tone = ctx.tone || 'instructive';
+    const clf = (ctx.classification || '').toLowerCase();
+
+    // Dedicated redemption lines when snapping OUT of greyscale despair!
+    if (prevState === 'depressed' && knightState === 'brilliant_shock') {
+      return pickLine('comeback_brilliant', ctx);
+    }
+    if (prevState === 'depressed' && knightState !== 'depressed' && knightState !== 'flabbergasted' && knightState !== 'manic_meltdown') {
+      return pickLine('comeback_recover', ctx);
+    }
+
     if (knightState === 'depressed') return pickLine('depressed', ctx);
     if (knightState === 'checkmate_hype') return pickLine('checkmate_hype', ctx);
     if (knightState === 'manic_meltdown') return pickLine('manic_meltdown', ctx);
     if (knightState === 'brilliant_shock') return pickLine('brilliant_shock', ctx);
     if (knightState === 'flabbergasted') return pickLine('flabbergasted', ctx);
-    if (knightState === 'annoyed') return pickLine('annoyed', ctx);
-    if (knightState === 'smug') return pickLine('smug', ctx);
+
+    if (knightState === 'annoyed') {
+      return tone === 'instructive' ? pickLine('instructive_mistake', ctx) : pickLine('annoyed', ctx);
+    }
+    if (knightState === 'smug') {
+      return tone === 'analytical' ? pickLine('analytical_strong', ctx) : pickLine('smug', ctx);
+    }
     if (knightState === 'suspicious') return pickLine('suspicious', ctx);
 
-    const clf = (ctx.classification || '').toLowerCase();
-    if (clf === 'book') return pickLine('opening', ctx);
+    if (clf === 'book') {
+      return tone === 'sarcastic' ? pickLine('opening', ctx) : pickLine('instructive_opening', ctx);
+    }
+    if (tone === 'analytical') return pickLine('analytical_routine', ctx);
+    if (tone === 'instructive') return pickLine('instructive_routine', ctx);
     return pickLine('routine', ctx);
   }
 
@@ -675,11 +742,20 @@
           eval_change: ctx.evalChange || 0,
           best_move: ctx.bestMoveUci,
           best_move_san: ctx.bestMoveSan,
+          tone: ctx.tone || 'instructive',
         }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       typeMessage(data.text || pickCommentaryForState(_currentState, ctx));
+
+      // Automatically play out the Best Move + Opponent's Best/Most Likely Reply on the board!
+      const lineUci = Array.isArray(data.best_line_uci) && data.best_line_uci.length > 0
+        ? data.best_line_uci
+        : (ctx.bestMoveUci ? [ctx.bestMoveUci] : []);
+      if (lineUci.length > 0 && global.BlunderlessCoach?.playExplainDemo) {
+        global.BlunderlessCoach.playExplainDemo(lineUci);
+      }
     } catch (_) {
       typeMessage(pickCommentaryForState(_currentState, ctx));
     }
@@ -688,6 +764,7 @@
   function handlePositionAnalyzed(ctx) {
     if (!ctx) return;
     const key = `${ctx.fen}|${ctx.ply}|${ctx.playedMoveUci || ''}`;
+    const prevState = _currentState;
     const newState = determineKnightState(ctx);
 
     applyStateTransition(newState);
@@ -695,7 +772,7 @@
 
     if (key !== _lastContextKey) {
       _lastContextKey = key;
-      typeMessage(pickCommentaryForState(newState, ctx));
+      typeMessage(pickCommentaryForState(newState, ctx, prevState));
     }
   }
 

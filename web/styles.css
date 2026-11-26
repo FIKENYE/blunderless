@@ -243,14 +243,14 @@ body {
   height: calc(100vh - var(--topbar-h));
 }
 
-/* ── Left Stage: Floating Knight Coach + Centered Board Assembly ── */
+/* ── Left Stage: Centered Board Assembly + Floating Chester Coach Combo ── */
 .left-stage {
   display: flex;
   flex-direction: row;
   align-items: center;
   justify-content: center;
-  gap: 24px;
-  padding: 16px 24px;
+  gap: 28px;
+  padding: 16px 24px 16px 36px;
   overflow: hidden;
   background: var(--canvas);
   position: relative;
@@ -259,6 +259,7 @@ body {
 @media (max-width: 1219px) {
   .left-stage {
     flex-direction: column;
+    justify-content: center;
     gap: 10px;
     padding: 10px 16px;
   }
@@ -594,11 +595,28 @@ body {
 .square-badge.clf-great { background: #4A7C9B; }
 .square-badge.clf-best { background: var(--c-best); }
 .square-badge.clf-excellent { background: #5B8C5A; }
+.square-badge.clf-good { background: var(--c-good); }
 .square-badge.clf-book { background: #A67B5B; }
 .square-badge.clf-inaccuracy { background: var(--c-inaccuracy); }
 .square-badge.clf-mistake { background: var(--c-mistake); }
 .square-badge.clf-miss { background: #D46A5E; }
 .square-badge.clf-blunder { background: var(--c-blunder); }
+
+.clf-svg-icon {
+  width: 12px;
+  height: 12px;
+  display: inline-block;
+  vertical-align: middle;
+  fill: currentColor;
+  flex-shrink: 0;
+}
+
+.square-badge .clf-svg-icon,
+.rt-badge .clf-svg-icon {
+  width: 12px;
+  height: 12px;
+  fill: #FAF6F0;
+}
 
 /* Slim Vertical Board Utility Rail */
 .board-utility-rail {
@@ -1145,6 +1163,7 @@ body {
 .move-glyph.glyph-great { color: #4A7C9B; font-weight: 900; }
 .move-glyph.glyph-best { color: var(--c-best); }
 .move-glyph.glyph-excellent { color: #5B8C5A; }
+.move-glyph.glyph-good { color: var(--c-good); }
 .move-glyph.glyph-book { color: #8C5A3C; }
 .move-glyph.glyph-inaccuracy { color: var(--c-inaccuracy); }
 .move-glyph.glyph-mistake { color: var(--c-mistake); }
@@ -1739,9 +1758,9 @@ body {
 .result-loss { color: var(--c-blunder); font-weight: 700; }
 .result-draw { color: var(--roast); font-weight: 700; }
 
-/* ── Floating Geometric Pixel-Art Knight Mascot & Typewriter Bubble ── */
+/* ── Floating Geometric Pixel-Art Knight Mascot ("Chester") & Typewriter Bubble ── */
 .knight-coach-stage {
-  width: 224px;
+  width: 256px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
@@ -1817,11 +1836,11 @@ body {
 
 .knight-speech-text {
   font-size: 11px;
-  line-height: 1.45;
+  line-height: 1.48;
   color: #22150E;
-  padding: 8px 9px;
-  min-height: 62px;
-  max-height: 112px;
+  padding: 8px 10px;
+  min-height: 68px;
+  max-height: 152px;
   overflow-y: auto;
   word-break: break-word;
 }

@@ -61,6 +61,7 @@ class ExplainRequest(BaseModel):
     eval_change: Optional[int] = None
     best_move: Optional[str] = None
     best_move_san: Optional[str] = None
+    tone: Optional[str] = "instructive"
 
 
 @asynccontextmanager
@@ -408,6 +409,7 @@ def explain_endpoint(payload: ExplainRequest, request: Request) -> dict[str, Any
             best_move=payload.best_move,
             best_move_san=payload.best_move_san,
             engine=eng,
+            tone=payload.tone or "instructive",
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
