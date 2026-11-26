@@ -2,9 +2,8 @@ import json
 import os
 import unittest
 from io import BytesIO
+from types import SimpleNamespace
 from unittest.mock import patch
-
-from fastapi.testclient import TestClient
 
 from src.auth import (
     OAUTH_STATE_COOKIE,
@@ -13,7 +12,11 @@ from src.auth import (
     get_google_config,
     verify_and_exchange_google_code,
 )
-from src.server import app
+from src.server import (
+    auth_me_endpoint,
+    google_login_redirect,
+    google_oauth_callback,
+)
 
 
 class _MockHttpResponse:
@@ -28,6 +31,13 @@ class _MockHttpResponse:
 
     def __exit__(self, *args):
         return False
+
+
+def _make_request(scheme: str = "http", netloc: str = "127.0.0.1:8000", cookies: dict | None = None):
+    return SimpleNamespace(
+        url=SimpleNamespace(scheme=scheme, netloc=netloc),
+        cookies=cookies or {},
+    )
 
 
 class TestGoogleAuthFlow(unittest.TestCase):
@@ -68,27 +78,34 @@ class TestGoogleAuthFlow(unittest.TestCase):
             self.assertTrue(bool(session_tok))
 
     def test_login_and_callback_routes_handle_missing_config_and_errors(self):
-        client = TestClient(app)
+        req = _make_request(netloc="localhost:8000")
         with patch.dict(os.environ, {"GOOGLE_CLIENT_ID": "", "GOOGLE_CLIENT_SECRET": ""}, clear=False):
-            me = client.get("/api/auth/me").json()
+            me = auth_me_endpoint(req)
             self.assertFalse(me["google_configured"])
-            self.assertTrue(me["google_redirect_uri"].endswith("/auth/google/callback"))
+            self.assertEqual(me["google_redirect_uri"], "http://localhost:8000/auth/google/callback")
 
-            login_resp = client.get("/auth/google/login", follow_redirects=False)
+            login_resp = google_login_redirect(req)
             self.assertEqual(login_resp.status_code, 302)
             self.assertIn("auth_error=", login_resp.headers["location"])
 
-            cancel_resp = client.get("/auth/google/callback?error=access_denied", follow_redirects=False)
+            cancel_resp = google_oauth_callback(
+                req,
+                code=None,
+                state=None,
+                error="access_denied",
+                error_description=None,
+            )
             self.assertEqual(cancel_resp.status_code, 302)
             self.assertIn("access_denied", cancel_resp.headers["location"])
 
     def test_login_route_sets_state_cookie_when_configured(self):
-        client = TestClient(app)
+        req = _make_request(netloc="127.0.0.1:8000")
         with patch.dict(os.environ, {"GOOGLE_CLIENT_ID": "cid", "GOOGLE_CLIENT_SECRET": "sec"}, clear=False):
-            resp = client.get("/auth/google/login", follow_redirects=False)
+            resp = google_login_redirect(req)
             self.assertEqual(resp.status_code, 302)
             self.assertIn("accounts.google.com/o/oauth2/v2/auth", resp.headers["location"])
-            self.assertIn(OAUTH_STATE_COOKIE, resp.cookies)
+            set_cookie = resp.headers.get("set-cookie", "")
+            self.assertIn(OAUTH_STATE_COOKIE, set_cookie)
 
 
 if __name__ == "__main__":

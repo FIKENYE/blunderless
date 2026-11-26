@@ -42,7 +42,7 @@ _OAUTH_STATES: dict[str, float] = {}
 
 def _load_dotenv_if_present() -> None:
     """Load simple KEY=VALUE lines from project-root `.env` without overriding env vars."""
-    env_path = Path(".env")
+    env_path = Path(__file__).resolve().parent.parent / ".env"
     if not env_path.is_file():
         return
     try:
