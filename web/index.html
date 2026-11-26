@@ -19,7 +19,7 @@
   <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
   <script src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"></script>
 
-  <link rel="stylesheet" href="/static/styles.css?v=11" />
+  <link rel="stylesheet" href="/static/styles.css?v=13" />
 </head>
 
 <body>
@@ -110,6 +110,7 @@
       <!-- Top Navigation Tabs -->
       <nav class="sidebar-tabs">
         <button class="tab-btn active" data-tab="moves">Moves</button>
+        <button class="tab-btn" data-tab="review">Review</button>
         <button class="tab-btn" data-tab="info">Info</button>
         <button class="tab-btn" data-tab="openings">Openings</button>
         <button class="tab-btn" data-tab="games">Games</button>
@@ -146,7 +147,26 @@
             <span class="best-move-tag">BEST</span>
             <span id="best-move-text">Best: —</span>
           </div>
-          <button id="btn-preview-best" class="btn btn-sm btn-secondary hidden" title="Temporarily preview best move on board">Preview Move</button>
+          <div class="best-move-actions">
+            <button id="btn-preview-best" class="btn btn-sm btn-secondary hidden" title="Temporarily preview best move on board">Preview</button>
+            <button id="btn-play-best" class="btn btn-sm btn-sage hidden" title="Play out a subgame starting from this best move">Play from Best</button>
+          </div>
+        </div>
+
+        <!-- Subgame / Variation Strip (visible when playing from Best Move) -->
+        <div class="subgame-strip hidden" id="subgame-strip">
+          <div class="subgame-top">
+            <div class="subgame-title-wrap">
+              <span class="subgame-tag">SUBGAME</span>
+              <span id="subgame-status" class="subgame-status">Your turn</span>
+            </div>
+            <div class="subgame-controls">
+              <button id="btn-subgame-undo" class="btn btn-sm btn-secondary" title="Undo move (←)">Undo</button>
+              <button id="btn-subgame-step" class="btn btn-sm btn-sage" title="Let computer play the best move">Step Best</button>
+              <button id="btn-subgame-exit" class="btn btn-sm btn-secondary" title="Return to main game (Esc)">Exit</button>
+            </div>
+          </div>
+          <div id="subgame-moves" class="subgame-moves"></div>
         </div>
       </div>
 
@@ -182,6 +202,54 @@
           </table>
           <div id="empty-moves" class="empty-state">
             No game loaded.<br />Use Quick Import above or fetch games from Chess.com.
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab 1.5: REVIEW (Eval Graph + 2-Column White vs Black Breakdown) -->
+      <div id="tab-review" class="tab-content hidden">
+        <div class="tab-scroll-pad">
+          <div id="review-empty" class="empty-state">
+            Load and analyse a game to view the evaluation graph and 2-column player breakdown.
+          </div>
+
+          <div id="review-body" class="review-body hidden">
+            <!-- Eval Graph -->
+            <div class="eval-graph-card">
+              <div class="eval-graph-header">
+                <span>EVALUATION GRAPH</span>
+                <span id="eval-graph-hover" class="eval-graph-hover">Click graph to jump</span>
+              </div>
+              <svg id="eval-graph-svg" class="eval-graph-svg" viewBox="0 0 400 110" preserveAspectRatio="none"></svg>
+            </div>
+
+            <!-- 2-Column Players & Accuracy -->
+            <div class="review-players-grid">
+              <div class="review-player-col">
+                <div class="review-avatar avatar-white" id="rev-w-avatar">W</div>
+                <div class="review-player-name" id="rev-w-name">White</div>
+                <div class="review-acc-pill review-acc-white" id="rev-w-acc">—</div>
+              </div>
+              <div class="review-vs-col">VS</div>
+              <div class="review-player-col">
+                <div class="review-avatar avatar-black" id="rev-b-avatar">B</div>
+                <div class="review-player-name" id="rev-b-name">Black</div>
+                <div class="review-acc-pill review-acc-black" id="rev-b-acc">—</div>
+              </div>
+            </div>
+
+            <!-- 2-Column Classification Breakdown Table -->
+            <table class="review-table">
+              <thead>
+                <tr>
+                  <th class="rt-cat">Category</th>
+                  <th class="rt-cnt">White</th>
+                  <th class="rt-ico"></th>
+                  <th class="rt-cnt">Black</th>
+                </tr>
+              </thead>
+              <tbody id="review-clf-tbody"></tbody>
+            </table>
           </div>
         </div>
       </div>
@@ -272,62 +340,8 @@
         </div>
       </div>
 
-      <!-- Bottom Summary & Classification Card + Primary CTA + Playback Controls -->
+      <!-- Bottom Primary CTA + Playback Controls -->
       <div class="sidebar-footer">
-        
-        <!-- Game Summary & Classification Card -->
-        <div class="game-summary-card" id="game-summary-card">
-          <!-- Accuracy % Bar -->
-          <div class="accuracy-row" id="accuracy-row">
-            <div class="accuracy-item">
-              <span class="accuracy-player" id="acc-white-label">White Acc:</span>
-              <span class="accuracy-val" id="acc-white-val">—</span>
-            </div>
-            <div class="accuracy-bar-track">
-              <div class="accuracy-bar-fill" id="acc-white-bar" style="width: 50%"></div>
-            </div>
-            <div class="accuracy-item">
-              <span class="accuracy-player" id="acc-black-label">Black Acc:</span>
-              <span class="accuracy-val" id="acc-black-val">—</span>
-            </div>
-          </div>
-
-          <!-- Structured 4-Column Badge Grid with Filter Action -->
-          <div class="quality-grid" id="quality-grid" title="Click category to jump/filter moves">
-            <button class="clf-badge-btn" data-clf="best" title="Filter Best moves">
-              <span class="badge-head">
-                <span class="badge-icon badge-best">★</span>
-                <span class="badge-label">Best</span>
-              </span>
-              <span class="badge-count" id="cnt-best">0</span>
-            </button>
-
-            <button class="clf-badge-btn" data-clf="inaccuracy" title="Filter Inaccuracies">
-              <span class="badge-head">
-                <span class="badge-icon badge-inaccuracy">?!</span>
-                <span class="badge-label">Inacc</span>
-              </span>
-              <span class="badge-count" id="cnt-inacc">0</span>
-            </button>
-
-            <button class="clf-badge-btn" data-clf="mistake" title="Filter Mistakes">
-              <span class="badge-head">
-                <span class="badge-icon badge-mistake">?</span>
-                <span class="badge-label">Mistake</span>
-              </span>
-              <span class="badge-count" id="cnt-mistake">0</span>
-            </button>
-
-            <button class="clf-badge-btn" data-clf="blunder" title="Filter Blunders">
-              <span class="badge-head">
-                <span class="badge-icon badge-blunder">??</span>
-                <span class="badge-label">Blunder</span>
-              </span>
-              <span class="badge-count" id="cnt-blunder">0</span>
-            </button>
-          </div>
-        </div>
-
         <!-- Show Best Move + Primary CTA -->
         <button id="btn-show-best" class="btn btn-best-toggle" title="Toggle Best Move Arrow & Strip (B)">
           <span>★ Show Best Move (B)</span>
@@ -364,7 +378,7 @@
   </main>
 
   <script src="/static/pieces.js?v=11"></script>
-  <script src="/static/app.js?v=11"></script>
+  <script src="/static/app.js?v=13"></script>
 </body>
 
 </html>

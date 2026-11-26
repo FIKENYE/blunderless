@@ -207,6 +207,17 @@ const state = {
   isOutOfBook: false,
   userHighlights: new Map(), // sq -> css rgba color
   userArrows: [],            // [{ from, to, color, outline }]
+  subgame: {
+    active: false,
+    returnPly: 0,
+    userColor: 'w',
+    game: null,
+    history: [],
+    busy: false,
+    bestMove: null,
+    bestMoveSan: null,
+    autoReplyTimer: null,
+  },
   headers: {
     white: 'White', black: 'Black',
     white_elo: '', black_elo: '',
@@ -258,14 +269,11 @@ function buildGameAtPly(ply = state.plyIndex) {
 
 function resetSummaryCard() {
   state.activeFilter = null;
-  document.querySelectorAll('.clf-badge-btn').forEach(b => b.classList.remove('filter-active'));
-  $('cnt-best').textContent = '0';
-  $('cnt-inacc').textContent = '0';
-  $('cnt-mistake').textContent = '0';
-  $('cnt-blunder').textContent = '0';
-  $('acc-white-val').textContent = '—';
-  $('acc-black-val').textContent = '—';
-  $('acc-white-bar').style.width = '50%';
+  document.querySelectorAll('.review-cnt-btn').forEach(b => b.classList.remove('filter-active'));
+  const emptyEl = $('review-empty');
+  const bodyEl = $('review-body');
+  if (emptyEl) emptyEl.classList.remove('hidden');
+  if (bodyEl) bodyEl.classList.add('hidden');
 }
 
 // ── Eval Bar & Engine Strip ─────────────────────────────────
@@ -310,10 +318,28 @@ function setEvalBar(score) {
 }
 
 // ── MultiPV Engine Lines Update ──────────────────────────────
-function updateEngineLines(score, bestMoveSan) {
+function updateEngineLines(score, bestMoveSan, topLines = null) {
+  if (Array.isArray(topLines) && topLines.length > 0) {
+    for (let idx = 0; idx < 3; idx++) {
+      const line = topLines[idx];
+      const scoreEl = $(`pv${idx + 1}-score`);
+      const movesEl = $(`pv${idx + 1}-moves`);
+      if (!scoreEl || !movesEl) continue;
+
+      if (line) {
+        scoreEl.textContent = formatScoreStr(line.score);
+        movesEl.textContent = (line.pv_san || []).slice(0, 6).join(' ') || line.move_san || '—';
+      } else {
+        scoreEl.textContent = '—';
+        movesEl.textContent = '—';
+      }
+    }
+    return;
+  }
+
   const s = score || { type: 'cp', value: 20 };
   const base = s.type === 'mate' ? `M${s.value}` : (s.value >= 0 ? `+${(s.value / 100).toFixed(2)}` : `${(s.value / 100).toFixed(2)}`);
-  
+
   $('pv1-score').textContent = base;
   if (bestMoveSan) {
     $('pv1-moves').textContent = `1. ${bestMoveSan} ... (best variation)`;
@@ -529,7 +555,10 @@ function initBoard() {
     position: 'start',
     orientation: state.orientation,
     pieceTheme: (piece) => window.BlunderlessPieces.getDataUri(piece),
-    draggable: false,
+    draggable: true,
+    onDragStart: onSubgameDragStart,
+    onDrop: onSubgameDrop,
+    onSnapEnd: onSubgameSnapEnd,
     moveSpeed: 150,
     snapbackSpeed: 120,
     snapSpeed: 60,
@@ -570,6 +599,7 @@ function initBoard() {
   window.addEventListener('resize', resize);
   setTimeout(resize, 50);
   setupBoardAnnotations();
+  setupClickToMove();
 }
 
 // ── Right-Click Square Highlights & Editorial SVG Arrows ─────
@@ -721,8 +751,11 @@ function buildArrowPath(fromSq, toSq) {
 }
 
 function getBestMoveForCurrentPly() {
+  if (state.subgame.active) {
+    return state.subgame.bestMove || null;
+  }
   if (state.plyIndex === 0) {
-    return state.initialBestMove || null;
+    return state.initialBestMove || state.moves[0]?.best_move || null;
   }
   const m = state.moves[state.plyIndex - 1];
   if (!m || !m.best_move) return null;
@@ -881,6 +914,9 @@ function highlightLastMove(fromSq, toSq, classification) {
 
 // ── Navigation ──────────────────────────────────────────────
 function goToPly(ply) {
+  if (state.subgame.active) {
+    exitSubgame(true);
+  }
   if (ply < 0 || ply > state.moves.length) return;
 
   const prevPly = state.plyIndex;
@@ -923,6 +959,8 @@ function goToPly(ply) {
   syncPlayerBars(ply);
   updateBestMoveUI();
   renderBoardArrows();
+  updateEvalGraphCursor(ply);
+  clearMoveSelection();
   updateCoachContext(currentFen, ply, moveData);
 
   document.querySelectorAll('.move-cell').forEach(c => c.classList.remove('active-ply'));
@@ -976,26 +1014,6 @@ function renderMoveList(movesData) {
   quickImportPanel.classList.add('hidden');
   resetSummaryCard();
 
-  const counts = { best: 0, inaccuracy: 0, mistake: 0, blunder: 0 };
-  for (const m of movesData) {
-    if (counts[m.classification] !== undefined) counts[m.classification]++;
-  }
-  $('cnt-best').textContent = counts.best;
-  $('cnt-inacc').textContent = counts.inaccuracy;
-  $('cnt-mistake').textContent = counts.mistake;
-  $('cnt-blunder').textContent = counts.blunder;
-
-  const acc = calculateAccuracy(movesData);
-  if (acc.white) {
-    $('acc-white-val').textContent = `${acc.white}%`;
-    $('acc-black-val').textContent = `${acc.black}%`;
-    const wVal = parseFloat(acc.white);
-    const bVal = parseFloat(acc.black);
-    const total = wVal + bVal;
-    const wPct = total > 0 ? (wVal / total) * 100 : 50;
-    $('acc-white-bar').style.width = `${wPct}%`;
-  }
-
   for (let i = 0; i < movesData.length; i += 2) {
     const wm = movesData[i];
     const bm = movesData[i + 1];
@@ -1014,10 +1032,11 @@ function renderMoveList(movesData) {
       div.className = 'move-cell';
       div.dataset.ply = move.ply;
       div.dataset.clf = move.classification;
+      div.dataset.color = move.color;
 
       const meta = CLF_META[move.classification] || CLF_META.good;
       const glyphHtml = meta.glyph ? `<span class="move-glyph ${meta.cls}">${meta.glyph}</span>` : '';
-      
+
       let lossHtml = '';
       if (move.eval_change < -20) {
         lossHtml = `<span class="move-loss">${(move.eval_change / 100).toFixed(1)}</span>`;
@@ -1049,31 +1068,223 @@ function renderMoveList(movesData) {
   }
 }
 
-// ── Filter Moves by Classification ───────────────────────────
-function filterMovesByClassification(clf) {
-  const buttons = document.querySelectorAll('.clf-badge-btn');
-  if (state.activeFilter === clf) {
-    state.activeFilter = null;
-    buttons.forEach(b => b.classList.remove('filter-active'));
-    document.querySelectorAll('.move-cell').forEach(c => c.style.opacity = '1');
+// ── Review Tab: Eval Graph & 2-Column Breakdown ─────────────
+function scoreToGraphRatio(score) {
+  if (!score) return 0.5;
+  const cp = score.type === 'mate'
+    ? (score.value > 0 ? 10000 : -10000)
+    : score.value;
+  // 0.0 = 0.5, +advantage -> toward 0 (top), -advantage -> toward 1 (bottom)
+  const advantage = Math.tanh(cp / 450);
+  return 0.5 - 0.46 * advantage;
+}
+
+function renderEvalGraph(movesData) {
+  const svg = $('eval-graph-svg');
+  if (!svg || !movesData || movesData.length === 0) return;
+  svg.innerHTML = '';
+
+  const ns = 'http://www.w3.org/2000/svg';
+  const W = 400;
+  const H = 110;
+  const total = movesData.length;
+
+  const points = [{ ply: 0, score: state.initialEval, clf: null }];
+  for (const m of movesData) {
+    points.push({ ply: m.ply, score: m.eval_after, clf: m.classification, san: m.san });
+  }
+
+  const coords = points.map((pt, idx) => ({
+    x: (idx / Math.max(1, total)) * W,
+    y: scoreToGraphRatio(pt.score) * H,
+    pt,
+  }));
+
+  // White area fill (from bottom H up to the curve)
+  const polyPts = [
+    `0,${H}`,
+    ...coords.map(c => `${c.x.toFixed(1)},${c.y.toFixed(1)}`),
+    `${W},${H}`,
+  ].join(' ');
+
+  const whiteArea = document.createElementNS(ns, 'polygon');
+  whiteArea.setAttribute('points', polyPts);
+  whiteArea.setAttribute('fill', '#FAF6F0');
+  svg.appendChild(whiteArea);
+
+  // Center 0.0 reference line
+  const midLine = document.createElementNS(ns, 'line');
+  midLine.setAttribute('x1', '0');
+  midLine.setAttribute('y1', String(H / 2));
+  midLine.setAttribute('x2', String(W));
+  midLine.setAttribute('y2', String(H / 2));
+  midLine.setAttribute('stroke', 'rgba(140, 90, 60, 0.45)');
+  midLine.setAttribute('stroke-width', '1');
+  midLine.setAttribute('stroke-dasharray', '3,3');
+  svg.appendChild(midLine);
+
+  // Eval curve stroke
+  const curve = document.createElementNS(ns, 'polyline');
+  curve.setAttribute('points', coords.map(c => `${c.x.toFixed(1)},${c.y.toFixed(1)}`).join(' '));
+  curve.setAttribute('fill', 'none');
+  curve.setAttribute('stroke', '#C08552');
+  curve.setAttribute('stroke-width', '1.6');
+  svg.appendChild(curve);
+
+  // Color-coded classification dots for notable moves
+  const dotColors = {
+    best: '#2E7D32',
+    inaccuracy: '#D9822B',
+    mistake: '#D9534F',
+    blunder: '#B71C1C',
+  };
+  for (const c of coords) {
+    const col = dotColors[c.pt.clf];
+    if (!col) continue;
+    const dot = document.createElementNS(ns, 'circle');
+    dot.setAttribute('cx', c.x.toFixed(1));
+    dot.setAttribute('cy', c.y.toFixed(1));
+    dot.setAttribute('r', c.pt.clf === 'blunder' ? '3.4' : '2.6');
+    dot.setAttribute('fill', col);
+    dot.setAttribute('stroke', '#22150E');
+    dot.setAttribute('stroke-width', '0.8');
+    svg.appendChild(dot);
+  }
+
+  // Active playhead cursor
+  const cursor = document.createElementNS(ns, 'line');
+  cursor.setAttribute('id', 'eval-graph-cursor');
+  cursor.setAttribute('x1', '0');
+  cursor.setAttribute('y1', '0');
+  cursor.setAttribute('x2', '0');
+  cursor.setAttribute('y2', String(H));
+  cursor.setAttribute('stroke', '#C86D3B');
+  cursor.setAttribute('stroke-width', '2');
+  svg.appendChild(cursor);
+
+  svg.onclick = (e) => {
+    const rect = svg.getBoundingClientRect();
+    const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    const targetPly = Math.round(ratio * total);
+    goToPly(targetPly);
+  };
+
+  svg.onmousemove = (e) => {
+    const rect = svg.getBoundingClientRect();
+    const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    const idx = Math.round(ratio * total);
+    const pt = points[idx];
+    if (pt) {
+      const lbl = pt.ply === 0 ? 'Start' : `${Math.ceil(pt.ply / 2)}. ${pt.san}`;
+      $('eval-graph-hover').textContent = `${lbl} (${formatScoreStr(pt.score)})`;
+    }
+  };
+
+  svg.onmouseleave = () => {
+    $('eval-graph-hover').textContent = 'Click graph to jump';
+  };
+}
+
+function updateEvalGraphCursor(ply) {
+  const cursor = $('eval-graph-cursor');
+  if (!cursor || state.moves.length === 0) return;
+  const x = (Math.max(0, Math.min(ply, state.moves.length)) / state.moves.length) * 400;
+  cursor.setAttribute('x1', x.toFixed(1));
+  cursor.setAttribute('x2', x.toFixed(1));
+}
+
+function renderReviewTab(movesData) {
+  const emptyEl = $('review-empty');
+  const bodyEl = $('review-body');
+  if (!movesData || movesData.length === 0) {
+    emptyEl.classList.remove('hidden');
+    bodyEl.classList.add('hidden');
     return;
   }
 
-  state.activeFilter = clf;
-  buttons.forEach(b => b.classList.toggle('filter-active', b.dataset.clf === clf));
+  emptyEl.classList.add('hidden');
+  bodyEl.classList.remove('hidden');
 
-  let firstMatchPly = null;
-  document.querySelectorAll('.move-cell').forEach(c => {
-    const isMatch = c.dataset.clf === clf;
-    c.style.opacity = isMatch ? '1' : '0.35';
-    if (isMatch && firstMatchPly === null) {
-      firstMatchPly = parseInt(c.dataset.ply, 10);
+  const acc = calculateAccuracy(movesData);
+  $('rev-w-name').textContent = state.headers.white || 'White';
+  $('rev-b-name').textContent = state.headers.black || 'Black';
+  $('rev-w-avatar').textContent = (state.headers.white || 'W')[0].toUpperCase();
+  $('rev-b-avatar').textContent = (state.headers.black || 'B')[0].toUpperCase();
+  $('rev-w-acc').textContent = acc.white ? `${acc.white}%` : '—';
+  $('rev-b-acc').textContent = acc.black ? `${acc.black}%` : '—';
+
+  const counts = {
+    white: { best: 0, good: 0, inaccuracy: 0, mistake: 0, blunder: 0 },
+    black: { best: 0, good: 0, inaccuracy: 0, mistake: 0, blunder: 0 },
+  };
+  for (const m of movesData) {
+    if (counts[m.color] && counts[m.color][m.classification] !== undefined) {
+      counts[m.color][m.classification]++;
     }
+  }
+
+  const rows = [
+    { key: 'best', label: 'Best', icon: '★', cls: 'clf-best' },
+    { key: 'good', label: 'Good', icon: '✓', cls: 'clf-good' },
+    { key: 'inaccuracy', label: 'Inaccuracy', icon: '?!', cls: 'clf-inaccuracy' },
+    { key: 'mistake', label: 'Mistake', icon: '?', cls: 'clf-mistake' },
+    { key: 'blunder', label: 'Blunder', icon: '??', cls: 'clf-blunder' },
+  ];
+
+  const tbody = $('review-clf-tbody');
+  tbody.innerHTML = '';
+
+  for (const r of rows) {
+    const wCnt = counts.white[r.key];
+    const bCnt = counts.black[r.key];
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="rt-label">${r.label}</td>
+      <td class="rt-cnt"><button class="review-cnt-btn" data-clf="${r.key}" data-color="white" ${wCnt === 0 ? 'disabled' : ''}>${wCnt}</button></td>
+      <td class="rt-ico"><span class="rt-badge ${r.cls}">${r.icon}</span></td>
+      <td class="rt-cnt"><button class="review-cnt-btn" data-clf="${r.key}" data-color="black" ${bCnt === 0 ? 'disabled' : ''}>${bCnt}</button></td>
+    `;
+    tbody.appendChild(tr);
+  }
+
+  tbody.querySelectorAll('.review-cnt-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      filterMovesByClassification(btn.dataset.clf, btn.dataset.color);
+    });
   });
 
-  if (firstMatchPly !== null) {
-    goToPly(firstMatchPly);
+  renderEvalGraph(movesData);
+  updateEvalGraphCursor(state.plyIndex);
+}
+
+// ── Filter Moves by Classification (Per-Player Cycle) ────────
+function filterMovesByClassification(clf, colorFilter = null) {
+  const filterKey = `${clf}:${colorFilter || 'all'}`;
+  const buttons = document.querySelectorAll('.review-cnt-btn');
+
+  const matchingPlies = state.moves
+    .filter(m => m.classification === clf && (!colorFilter || m.color === colorFilter))
+    .map(m => m.ply);
+
+  if (matchingPlies.length === 0) return;
+
+  if (state.activeFilter === filterKey) {
+    // Cycle to next matching move for that player/category
+    const nextIdx = matchingPlies.findIndex(p => p > state.plyIndex);
+    const targetPly = nextIdx !== -1 ? matchingPlies[nextIdx] : matchingPlies[0];
+    goToPly(targetPly);
+    return;
   }
+
+  state.activeFilter = filterKey;
+  buttons.forEach(b => b.classList.toggle('filter-active', b.dataset.clf === clf && (!colorFilter || b.dataset.color === colorFilter)));
+
+  document.querySelectorAll('.move-cell').forEach(c => {
+    const isMatch = c.dataset.clf === clf && (!colorFilter || c.dataset.color === colorFilter);
+    c.style.opacity = isMatch ? '1' : '0.35';
+  });
+
+  goToPly(matchingPlies[0]);
 }
 
 // ── Analysis Requests ───────────────────────────────────────
@@ -1161,6 +1372,7 @@ async function analysePgn(pgn) {
   `;
 
   renderMoveList(res.moves);
+  renderReviewTab(res.moves);
   emptyMoves.classList.add('hidden');
 
   // Auto-POV orientation based on searched username
@@ -1170,7 +1382,7 @@ async function analysePgn(pgn) {
 
   goToPly(0);
   setStatus(`Loaded · ${res.moves.length} half-moves`, 'ok');
-  switchTab('moves');
+  switchTab('review');
 }
 
 // ── Chess.com Loader ────────────────────────────────────────
@@ -1348,31 +1560,40 @@ function updateBestMoveUI() {
   const strip = $('best-move-strip');
   const textEl = $('best-move-text');
   const previewBtn = $('btn-preview-best');
+  const playBtn = $('btn-play-best');
   const railBtn = $('btn-rail-best');
   const sideBtn = $('btn-show-best');
 
   if (railBtn) railBtn.classList.toggle('active', state.showBestMove);
   if (sideBtn) sideBtn.classList.toggle('active', state.showBestMove);
 
+  if (state.subgame.active) {
+    strip.classList.add('hidden');
+    return;
+  }
+
   if (!state.showBestMove) {
     strip.classList.add('hidden');
-    if (previewBtn) previewBtn.textContent = 'Preview Move';
+    if (previewBtn) previewBtn.textContent = 'Preview';
     return;
   }
 
   strip.classList.remove('hidden');
   if (previewBtn) {
-    previewBtn.textContent = state.isPreviewingBest ? 'Restore Move' : 'Preview Move';
+    previewBtn.textContent = state.isPreviewingBest ? 'Restore' : 'Preview';
   }
 
   if (state.plyIndex === 0) {
     const bestSan = state.initialBestMoveSan || state.moves[0]?.best_move_san;
-    if (bestSan) {
-      textEl.textContent = `Best: ${bestSan} (${formatScoreStr(state.initialEval)})`;
-      previewBtn.classList.remove('hidden');
+    const bestUci = state.initialBestMove || state.moves[0]?.best_move;
+    if (bestSan || bestUci) {
+      textEl.textContent = `Best: ${bestSan || bestUci} (${formatScoreStr(state.initialEval)})`;
+      previewBtn.classList.toggle('hidden', !bestUci);
+      if (playBtn) playBtn.classList.toggle('hidden', !bestUci);
     } else {
       textEl.textContent = 'Starting Position';
       previewBtn.classList.add('hidden');
+      if (playBtn) playBtn.classList.add('hidden');
     }
     return;
   }
@@ -1381,12 +1602,14 @@ function updateBestMoveUI() {
   if (!m) {
     textEl.textContent = 'No move data';
     previewBtn.classList.add('hidden');
+    if (playBtn) playBtn.classList.add('hidden');
     return;
   }
 
   if (m.uci === m.best_move || m.classification === 'best') {
     textEl.textContent = '★ Best move played';
     previewBtn.classList.add('hidden');
+    if (playBtn) playBtn.classList.add('hidden');
     return;
   }
 
@@ -1402,6 +1625,7 @@ function updateBestMoveUI() {
   const evalPart = bestEvalStr ? `(${bestEvalStr} vs played ${playedEvalStr})` : `(played ${playedEvalStr})`;
   textEl.textContent = `Best: ${m.best_move_san || m.best_move || '—'} ${evalPart}`;
   previewBtn.classList.toggle('hidden', !m.best_move);
+  if (playBtn) playBtn.classList.toggle('hidden', !m.best_move);
 }
 
 function toggleBestMove() {
@@ -1442,6 +1666,390 @@ function previewBestMove() {
   sounds.move();
   updateBestMoveUI();
   renderBoardArrows();
+}
+
+// ── Play-from-Best-Move Subgame & Click-to-Move Engine ───────
+let _selectedSquare = null;
+let _pendingDropMove = null;
+
+function clearMoveSelection() {
+  _selectedSquare = null;
+  $('board').querySelectorAll('.highlight-selected').forEach(el => el.classList.remove('highlight-selected'));
+  $('board').querySelectorAll('.legal-dot').forEach(el => el.remove());
+}
+
+function getActiveChessInstance() {
+  if (state.subgame.active && state.subgame.game) {
+    return state.subgame.game;
+  }
+  return buildGameAtPly(state.plyIndex);
+}
+
+function showLegalMovesFrom(square, game) {
+  clearMoveSelection();
+  const moves = game.moves({ square, verbose: true });
+  if (!moves || moves.length === 0) return;
+
+  _selectedSquare = square;
+  const sqEl = $('board').querySelector(`[data-square="${square}"]`);
+  if (sqEl) sqEl.classList.add('highlight-selected');
+
+  for (const m of moves) {
+    const destEl = $('board').querySelector(`[data-square="${m.to}"]`);
+    if (destEl) {
+      const dot = document.createElement('div');
+      dot.className = 'legal-dot' + (m.captured ? ' legal-capture' : '');
+      destEl.appendChild(dot);
+    }
+  }
+}
+
+function enterSubgameWithMove(fromSq, toSq, branchPly = state.plyIndex) {
+  const subGame = buildGameAtPly(branchPly);
+  const userColor = subGame.turn();
+  const moveObj = subGame.move({ from: fromSq, to: toSq, promotion: 'q' });
+  if (!moveObj) return false;
+
+  clearAnnotations();
+  clearMoveSelection();
+  clearTimeout(state.subgame.autoReplyTimer);
+
+  state.isPreviewingBest = false;
+  state.showBestMove = true;
+  state.subgame = {
+    active: true,
+    returnPly: state.plyIndex,
+    userColor,
+    game: subGame,
+    history: [],
+    busy: false,
+    bestMove: null,
+    bestMoveSan: null,
+    autoReplyTimer: null,
+  };
+
+  updateBestMoveUI();
+  handleSubgameMove(moveObj, true);
+  return true;
+}
+
+function setupClickToMove() {
+  const boardEl = $('board');
+  if (!boardEl) return;
+
+  boardEl.addEventListener('click', (e) => {
+    if (state.subgame.busy) return;
+    const sq = getSquareFromPointer(e);
+    if (!sq) return;
+
+    // 1. If Best Move Arrow is visible in main-game mode and user clicks its destination square,
+    //    take back the move (ply - 1), play the best move, and enter Subgame Mode vs Stockfish!
+    if (!state.subgame.active && state.showBestMove && !state.isPreviewingBest) {
+      const bestUci = getBestMoveForCurrentPly();
+      if (bestUci && bestUci.length >= 4 && sq === bestUci.slice(2, 4)) {
+        const branchPly = state.plyIndex === 0 ? 0 : state.plyIndex - 1;
+        enterSubgameWithMove(bestUci.slice(0, 2), bestUci.slice(2, 4), branchPly);
+        return;
+      }
+    }
+
+    const game = getActiveChessInstance();
+    if (game.game_over()) return;
+
+    // 2. If a piece is already selected, check if clicked square is a legal destination
+    if (_selectedSquare) {
+      if (_selectedSquare === sq) {
+        clearMoveSelection();
+        return;
+      }
+      const legalMatch = game.moves({ square: _selectedSquare, verbose: true }).find(m => m.to === sq);
+      if (legalMatch) {
+        const fromSq = _selectedSquare;
+        clearMoveSelection();
+        if (state.subgame.active) {
+          const moveObj = state.subgame.game.move({ from: fromSq, to: sq, promotion: 'q' });
+          if (moveObj) handleSubgameMove(moveObj, true);
+        } else {
+          enterSubgameWithMove(fromSq, sq, state.plyIndex);
+        }
+        return;
+      }
+    }
+
+    // 3. Otherwise, if clicked square has a piece of the active turn, select it
+    const piece = game.get(sq);
+    if (piece && piece.color === game.turn()) {
+      showLegalMovesFrom(sq, game);
+    } else {
+      clearMoveSelection();
+    }
+  });
+}
+
+function onSubgameDragStart(source, piece) {
+  if (state.subgame.busy) return false;
+  clearMoveSelection();
+
+  if (state.subgame.active && state.subgame.game) {
+    if (state.subgame.game.game_over()) return false;
+    return piece[0] === state.subgame.game.turn();
+  }
+
+  // Allow dragging from main-game mode to start a Subgame seamlessly
+  const game = buildGameAtPly(state.plyIndex);
+  if (game.game_over()) return false;
+  return piece[0] === game.turn();
+}
+
+function onSubgameDrop(source, target) {
+  if (state.subgame.busy || source === target) return 'snapback';
+
+  if (state.subgame.active && state.subgame.game) {
+    const moveObj = state.subgame.game.move({ from: source, to: target, promotion: 'q' });
+    if (!moveObj) return 'snapback';
+    _pendingDropMove = { moveObj, isNewSubgame: false };
+    return;
+  }
+
+  // Validate against current position before entering subgame in onSnapEnd
+  const testGame = buildGameAtPly(state.plyIndex);
+  const moveObj = testGame.move({ from: source, to: target, promotion: 'q' });
+  if (!moveObj) return 'snapback';
+  _pendingDropMove = { from: source, to: target, isNewSubgame: true };
+}
+
+function onSubgameSnapEnd() {
+  if (_pendingDropMove) {
+    const pending = _pendingDropMove;
+    _pendingDropMove = null;
+    clearAnnotations();
+    if (pending.isNewSubgame) {
+      enterSubgameWithMove(pending.from, pending.to, state.plyIndex);
+    } else if (state.subgame.active && state.subgame.game) {
+      handleSubgameMove(pending.moveObj, true);
+    }
+    return;
+  }
+  if (state.subgame.active && state.subgame.game) {
+    state.board.position(state.subgame.game.fen(), false);
+  }
+}
+
+function renderSubgameUI(statusOverride = null) {
+  const strip = $('subgame-strip');
+  const statusEl = $('subgame-status');
+  const movesEl = $('subgame-moves');
+  const undoBtn = $('btn-subgame-undo');
+  const stepBtn = $('btn-subgame-step');
+
+  if (!state.subgame.active) {
+    strip.classList.add('hidden');
+    return;
+  }
+
+  strip.classList.remove('hidden');
+
+  const g = state.subgame.game;
+  if (statusOverride) {
+    statusEl.textContent = statusOverride;
+  } else if (g.in_checkmate()) {
+    statusEl.textContent = g.turn() === 'w' ? 'Checkmate · Black wins' : 'Checkmate · White wins';
+  } else if (g.in_draw()) {
+    statusEl.textContent = 'Draw';
+  } else if (state.subgame.busy) {
+    statusEl.textContent = 'Stockfish thinking...';
+  } else {
+    const turnLabel = g.turn() === 'w' ? 'White' : 'Black';
+    const who = g.turn() === state.subgame.userColor ? 'Your turn' : 'Computer turn';
+    statusEl.textContent = `${who} (${turnLabel})`;
+  }
+
+  if (undoBtn) undoBtn.disabled = state.subgame.busy || state.subgame.history.length <= 1;
+  if (stepBtn) stepBtn.disabled = state.subgame.busy || g.game_over() || !state.subgame.bestMove;
+
+  // Format breadcrumb move list
+  const parts = [];
+  for (let i = 0; i < state.subgame.history.length; i++) {
+    const entry = state.subgame.history[i];
+    if (entry.color === 'w') {
+      parts.push(`${entry.moveNum}. ${entry.san}`);
+    } else if (i === 0) {
+      parts.push(`${entry.moveNum}... ${entry.san}`);
+    } else {
+      parts.push(entry.san);
+    }
+  }
+  movesEl.textContent = parts.join(' ') || '—';
+  movesEl.scrollTop = movesEl.scrollHeight;
+}
+
+async function handleSubgameMove(moveObj, shouldAutoReply) {
+  const g = state.subgame.game;
+  const fenAfter = g.fen();
+  const moveNum = Math.ceil((state.subgame.returnPly + state.subgame.history.length + 1) / 2);
+
+  state.subgame.history.push({
+    san: moveObj.san,
+    uci: moveObj.from + moveObj.to + (moveObj.promotion || ''),
+    color: moveObj.color,
+    moveNum,
+    fen: fenAfter,
+  });
+
+  state.board.position(fenAfter, true);
+  highlightLastMove(moveObj.from, moveObj.to, null);
+  playMoveSound({ san: moveObj.san }, g);
+  updateOpeningDisplay(fenAfter);
+  renderSubgameUI('Analysing...');
+
+  await analyseSubgamePosition(shouldAutoReply);
+}
+
+async function analyseSubgamePosition(autoReply = false) {
+  const g = state.subgame.game;
+  if (!state.subgame.active || !g) return;
+
+  const fen = g.fen();
+  state.subgame.busy = true;
+  renderSubgameUI('Analysing...');
+
+  try {
+    const res = await fetchApi('/api/analyse-fen', 'POST', { fen, depth: 12 });
+    if (!state.subgame.active || g.fen() !== fen) return;
+
+    const eng = res.engine;
+    state.subgame.bestMove = eng.best_move || null;
+    state.subgame.bestMoveSan = eng.best_move_san || null;
+    state.topLines = eng.top_lines || [];
+
+    engineMeta.textContent = `Stockfish · d${res.depth || 12}`;
+    setEvalBar(eng.score);
+    updateEngineLines(eng.score, eng.best_move_san, eng.top_lines);
+
+    if (autoReply && !g.game_over() && g.turn() !== state.subgame.userColor && eng.best_move) {
+      renderSubgameUI('Computer playing best...');
+      clearTimeout(state.subgame.autoReplyTimer);
+      state.subgame.autoReplyTimer = setTimeout(() => {
+        if (!state.subgame.active) return;
+        const reply = g.move({
+          from: eng.best_move.slice(0, 2),
+          to: eng.best_move.slice(2, 4),
+          promotion: eng.best_move.slice(4, 5) || 'q',
+        });
+        state.subgame.busy = false;
+        if (reply) {
+          handleSubgameMove(reply, false);
+        } else {
+          renderSubgameUI();
+          renderBoardArrows();
+        }
+      }, 360);
+      return;
+    }
+
+    state.subgame.busy = false;
+    renderSubgameUI();
+    renderBoardArrows();
+    updateCoachContext(fen, state.subgame.returnPly + state.subgame.history.length, null);
+  } catch (err) {
+    state.subgame.busy = false;
+    renderSubgameUI(`Engine error: ${err.message}`);
+  }
+}
+
+function startBestMoveSubgame() {
+  const branchPly = state.plyIndex === 0 ? 0 : state.plyIndex - 1;
+  const bestUci = state.plyIndex === 0
+    ? (state.initialBestMove || state.moves[0]?.best_move)
+    : state.moves[state.plyIndex - 1]?.best_move;
+
+  if (!bestUci || bestUci.length < 4) return;
+
+  const subGame = buildGameAtPly(branchPly);
+  const userColor = subGame.turn();
+
+  const moveObj = subGame.move({
+    from: bestUci.slice(0, 2),
+    to: bestUci.slice(2, 4),
+    promotion: bestUci.slice(4, 5) || 'q',
+  });
+  if (!moveObj) return;
+
+  clearAnnotations();
+  clearTimeout(state.subgame.autoReplyTimer);
+
+  state.isPreviewingBest = false;
+  state.showBestMove = true;
+  state.subgame = {
+    active: true,
+    returnPly: state.plyIndex,
+    userColor,
+    game: subGame,
+    history: [],
+    busy: false,
+    bestMove: null,
+    bestMoveSan: null,
+    autoReplyTimer: null,
+  };
+
+  updateBestMoveUI();
+  handleSubgameMove(moveObj, true);
+}
+
+function stepSubgameBestMove() {
+  if (!state.subgame.active || state.subgame.busy || !state.subgame.game) return;
+  const g = state.subgame.game;
+  const bestUci = state.subgame.bestMove;
+  if (g.game_over() || !bestUci || bestUci.length < 4) return;
+
+  const moveObj = g.move({
+    from: bestUci.slice(0, 2),
+    to: bestUci.slice(2, 4),
+    promotion: bestUci.slice(4, 5) || 'q',
+  });
+  if (!moveObj) return;
+
+  // Step one best move for whichever side is to move, then analyse next position
+  handleSubgameMove(moveObj, false);
+}
+
+function undoSubgameMove() {
+  if (!state.subgame.active || state.subgame.busy || !state.subgame.game) return;
+  if (state.subgame.history.length <= 1) return;
+
+  const g = state.subgame.game;
+  // If it's currently the user's turn and computer already replied, undo 2 plies back to user's turn
+  const steps = (g.turn() === state.subgame.userColor && state.subgame.history.length >= 3) ? 2 : 1;
+  for (let i = 0; i < steps; i++) {
+    g.undo();
+    state.subgame.history.pop();
+  }
+
+  const fen = g.fen();
+  const last = state.subgame.history[state.subgame.history.length - 1];
+  state.board.position(fen, true);
+  if (last) {
+    highlightLastMove(last.uci.slice(0, 2), last.uci.slice(2, 4), null);
+  }
+  sounds.reverse();
+  updateOpeningDisplay(fen);
+  analyseSubgamePosition(false);
+}
+
+function exitSubgame(skipGoToPly = false) {
+  if (!state.subgame.active) return;
+  clearTimeout(state.subgame.autoReplyTimer);
+  const returnPly = state.subgame.returnPly;
+  state.subgame.active = false;
+  state.subgame.busy = false;
+  state.subgame.game = null;
+  state.subgame.history = [];
+  state.subgame.bestMove = null;
+  $('subgame-strip').classList.add('hidden');
+  updateBestMoveUI();
+  if (!skipGoToPly) {
+    goToPly(returnPly);
+  }
 }
 
 function updateCoachContext(fen, ply, moveData) {
@@ -1568,9 +2176,13 @@ document.addEventListener('DOMContentLoaded', () => {
   $('btn-rail-coords').addEventListener('click', toggleCoordinates);
   $('btn-rail-best').addEventListener('click', toggleBestMove);
 
-  // Best Move Sidebar Controls
+  // Best Move & Subgame Sidebar Controls
   $('btn-show-best').addEventListener('click', toggleBestMove);
   $('btn-preview-best').addEventListener('click', previewBestMove);
+  $('btn-play-best').addEventListener('click', startBestMoveSubgame);
+  $('btn-subgame-undo').addEventListener('click', undoSubgameMove);
+  $('btn-subgame-step').addEventListener('click', stepSubgameBestMove);
+  $('btn-subgame-exit').addEventListener('click', () => exitSubgame(false));
 
   // Return to last book move button
   $('btn-return-book').addEventListener('click', () => {
@@ -1584,7 +2196,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Engine Lines Collapse Toggle
   $('btn-engine-toggle').addEventListener('click', toggleEngineLines);
 
-  // Classification Badge Click Filters
+  // Classification Badge Click Filters (legacy guard if any exist)
   document.querySelectorAll('.clf-badge-btn').forEach(btn => {
     btn.addEventListener('click', () => filterMovesByClassification(btn.dataset.clf));
   });
@@ -1647,13 +2259,21 @@ document.addEventListener('DOMContentLoaded', () => {
     if (document.activeElement === $('tab-chesscom-input')) return;
 
     switch (e.key) {
+      case 'Escape':
+        if (state.subgame.active) {
+          e.preventDefault();
+          exitSubgame(false);
+        }
+        break;
       case 'ArrowLeft':
         e.preventDefault();
-        goToPly(state.plyIndex - 1);
+        if (state.subgame.active) undoSubgameMove();
+        else goToPly(state.plyIndex - 1);
         break;
       case 'ArrowRight':
         e.preventDefault();
-        goToPly(state.plyIndex + 1);
+        if (state.subgame.active) stepSubgameBestMove();
+        else goToPly(state.plyIndex + 1);
         break;
       case 'ArrowUp':
       case 'Home':
