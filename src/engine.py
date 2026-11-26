@@ -16,11 +16,33 @@ DEFAULT_ENGINE_PATH = Path("engine") / "stockfish.exe"
 
 
 def get_engine(path: str | Path = DEFAULT_ENGINE_PATH) -> chess.engine.SimpleEngine:
-    """Start and return a Stockfish UCI engine process."""
+    """Start and return a deterministic single-threaded Stockfish UCI engine."""
     engine_path = Path(path)
     if not engine_path.exists():
         raise FileNotFoundError(f"Stockfish binary not found at: {engine_path}")
-    return chess.engine.SimpleEngine.popen_uci(str(engine_path))
+    eng = chess.engine.SimpleEngine.popen_uci(str(engine_path))
+    try:
+        opts: dict[str, Any] = {}
+        if "Threads" in eng.options:
+            opts["Threads"] = 1
+        if "Hash" in eng.options:
+            opts["Hash"] = 64
+        if opts:
+            eng.configure(opts)
+    except Exception:
+        pass
+    return eng
+
+
+def reset_engine_hash(engine: Optional[chess.engine.SimpleEngine]) -> None:
+    """Clear Stockfish's transposition table so repeated analyses are deterministic."""
+    if engine is None:
+        return
+    try:
+        if "Clear Hash" in engine.options:
+            engine.configure({"Clear Hash": True})
+    except Exception:
+        pass
 
 
 @contextmanager

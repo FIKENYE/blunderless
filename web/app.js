@@ -249,10 +249,15 @@ const analyseBtn = $('analyse-btn');
 const gamesList = $('games-list');
 
 const CLF_META = {
+  brilliant: { glyph: '!!', cls: 'glyph-brilliant', badgeCls: 'clf-brilliant', title: 'Brilliant' },
+  great: { glyph: '!', cls: 'glyph-great', badgeCls: 'clf-great', title: 'Great' },
   best: { glyph: '★', cls: 'glyph-best', badgeCls: 'clf-best', title: 'Best' },
+  excellent: { glyph: '👍', cls: 'glyph-excellent', badgeCls: 'clf-excellent', title: 'Excellent' },
   good: { glyph: '', cls: 'glyph-good', badgeCls: 'clf-good', title: 'Good' },
+  book: { glyph: '📖', cls: 'glyph-book', badgeCls: 'clf-book', title: 'Book' },
   inaccuracy: { glyph: '?!', cls: 'glyph-inaccuracy', badgeCls: 'clf-inaccuracy', title: 'Inaccuracy' },
   mistake: { glyph: '?', cls: 'glyph-mistake', badgeCls: 'clf-mistake', title: 'Mistake' },
+  miss: { glyph: '✕', cls: 'glyph-miss', badgeCls: 'clf-miss', title: 'Miss' },
   blunder: { glyph: '??', cls: 'glyph-blunder', badgeCls: 'clf-blunder', title: 'Blunder' },
 };
 
@@ -355,25 +360,20 @@ function updateEngineLines(score, bestMoveSan, topLines = null) {
   }
 }
 
-// ── Live Opening Explorer (Lichess API) ──────────────────────
+// ── Live Opening Explorer (Backend Proxy + Built-in ECO Book) ──
 async function fetchOpeningData(fen) {
   const cacheKey = `${state.selectedDb}:${fen}`;
   if (openingCache.has(cacheKey)) {
     return openingCache.get(cacheKey);
   }
 
-  const endpoint = state.selectedDb === 'masters'
-    ? `https://explorer.lichess.org/masters?fen=${encodeURIComponent(fen)}`
-    : `https://explorer.lichess.org/lichess?fen=${encodeURIComponent(fen)}`;
-
   try {
-    const res = await fetch(endpoint);
+    const res = await fetch(`/api/opening?fen=${encodeURIComponent(fen)}&db=${encodeURIComponent(state.selectedDb)}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     openingCache.set(cacheKey, data);
     return data;
   } catch (err) {
-    // If offline or failed, fallback to local lookup/graceful message
     return null;
   }
 }
@@ -559,9 +559,9 @@ function initBoard() {
     onDragStart: onSubgameDragStart,
     onDrop: onSubgameDrop,
     onSnapEnd: onSubgameSnapEnd,
-    moveSpeed: 150,
-    snapbackSpeed: 120,
-    snapSpeed: 60,
+    moveSpeed: 110,
+    snapbackSpeed: 35,
+    snapSpeed: 25,
   });
 
 
@@ -986,25 +986,21 @@ function playMoveSound(moveData, boardAfter) {
 function calculateAccuracy(moves) {
   if (!moves || moves.length === 0) return { white: null, black: null };
 
-  let wSum = 0, wCount = 0;
-  let bSum = 0, bCount = 0;
-
-  for (const m of moves) {
-    const loss = Math.max(0, -m.eval_change);
-    const moveAcc = Math.max(0, Math.min(100, 103.1668 * Math.exp(-0.04354 * (loss / 10)) - 3.1669));
-
-    if (m.color === 'white') {
-      wSum += moveAcc;
-      wCount++;
-    } else {
-      bSum += moveAcc;
-      bCount++;
-    }
-  }
+  const sideAcc = (color) => {
+    const side = moves.filter(m => m.color === color);
+    if (side.length === 0) return null;
+    const accs = side.map(m => {
+      const winLoss = typeof m.epl === 'number' ? m.epl * 100 : Math.max(0, -m.eval_change) / 4;
+      return Math.max(1, Math.min(100, 103.1668 * Math.exp(-0.04354 * winLoss) - 3.1669));
+    });
+    const arith = accs.reduce((a, b) => a + b, 0) / accs.length;
+    const harm = accs.length / accs.reduce((a, b) => a + 1 / b, 0);
+    return ((arith + harm) / 2).toFixed(1);
+  };
 
   return {
-    white: wCount > 0 ? (wSum / wCount).toFixed(1) : null,
-    black: bCount > 0 ? (bSum / bCount).toFixed(1) : null,
+    white: sideAcc('white'),
+    black: sideAcc('black'),
   };
 }
 
@@ -1133,9 +1129,13 @@ function renderEvalGraph(movesData) {
 
   // Color-coded classification dots for notable moves
   const dotColors = {
+    brilliant: '#1B9AAA',
+    great: '#4A7C9B',
     best: '#2E7D32',
+    book: '#A67B5B',
     inaccuracy: '#D9822B',
     mistake: '#D9534F',
+    miss: '#D46A5E',
     blunder: '#B71C1C',
   };
   for (const c of coords) {
@@ -1193,7 +1193,7 @@ function updateEvalGraphCursor(ply) {
   cursor.setAttribute('x2', x.toFixed(1));
 }
 
-function renderReviewTab(movesData) {
+function renderReviewTab(movesData, summary = null) {
   const emptyEl = $('review-empty');
   const bodyEl = $('review-body');
   if (!movesData || movesData.length === 0) {
@@ -1206,17 +1206,24 @@ function renderReviewTab(movesData) {
   bodyEl.classList.remove('hidden');
 
   const acc = calculateAccuracy(movesData);
+  const wAcc = summary?.white_accuracy ?? acc.white;
+  const bAcc = summary?.black_accuracy ?? acc.black;
   $('rev-w-name').textContent = state.headers.white || 'White';
   $('rev-b-name').textContent = state.headers.black || 'Black';
   $('rev-w-avatar').textContent = (state.headers.white || 'W')[0].toUpperCase();
   $('rev-b-avatar').textContent = (state.headers.black || 'B')[0].toUpperCase();
-  $('rev-w-acc').textContent = acc.white ? `${acc.white}%` : '—';
-  $('rev-b-acc').textContent = acc.black ? `${acc.black}%` : '—';
+  $('rev-w-acc').textContent = wAcc !== null && wAcc !== undefined ? `${wAcc}%` : '—';
+  $('rev-b-acc').textContent = bAcc !== null && bAcc !== undefined ? `${bAcc}%` : '—';
+  $('rev-w-rating').textContent = summary?.white_game_rating ?? '—';
+  $('rev-b-rating').textContent = summary?.black_game_rating ?? '—';
+  $('rev-w-acpl').textContent = summary?.white_acpl ?? '—';
+  $('rev-b-acpl').textContent = summary?.black_acpl ?? '—';
 
-  const counts = {
-    white: { best: 0, good: 0, inaccuracy: 0, mistake: 0, blunder: 0 },
-    black: { best: 0, good: 0, inaccuracy: 0, mistake: 0, blunder: 0 },
-  };
+  const emptyCounts = () => ({
+    brilliant: 0, great: 0, best: 0, excellent: 0, good: 0,
+    book: 0, inaccuracy: 0, mistake: 0, miss: 0, blunder: 0,
+  });
+  const counts = { white: emptyCounts(), black: emptyCounts() };
   for (const m of movesData) {
     if (counts[m.color] && counts[m.color][m.classification] !== undefined) {
       counts[m.color][m.classification]++;
@@ -1224,10 +1231,15 @@ function renderReviewTab(movesData) {
   }
 
   const rows = [
+    { key: 'brilliant', label: 'Brilliant', icon: '!!', cls: 'clf-brilliant' },
+    { key: 'great', label: 'Great', icon: '!', cls: 'clf-great' },
     { key: 'best', label: 'Best', icon: '★', cls: 'clf-best' },
+    { key: 'excellent', label: 'Excellent', icon: '👍', cls: 'clf-excellent' },
     { key: 'good', label: 'Good', icon: '✓', cls: 'clf-good' },
+    { key: 'book', label: 'Book', icon: '📖', cls: 'clf-book' },
     { key: 'inaccuracy', label: 'Inaccuracy', icon: '?!', cls: 'clf-inaccuracy' },
     { key: 'mistake', label: 'Mistake', icon: '?', cls: 'clf-mistake' },
+    { key: 'miss', label: 'Miss', icon: '✕', cls: 'clf-miss' },
     { key: 'blunder', label: 'Blunder', icon: '??', cls: 'clf-blunder' },
   ];
 
@@ -1372,7 +1384,7 @@ async function analysePgn(pgn) {
   `;
 
   renderMoveList(res.moves);
-  renderReviewTab(res.moves);
+  renderReviewTab(res.moves, res.summary || null);
   emptyMoves.classList.add('hidden');
 
   // Auto-POV orientation based on searched username
@@ -1737,8 +1749,21 @@ function setupClickToMove() {
   const boardEl = $('board');
   if (!boardEl) return;
 
-  boardEl.addEventListener('click', (e) => {
-    if (state.subgame.busy) return;
+  let downPos = null;
+
+  boardEl.addEventListener('mousedown', (e) => {
+    if (e.button === 0) {
+      downPos = { x: e.clientX, y: e.clientY };
+    }
+  });
+
+  boardEl.addEventListener('mouseup', (e) => {
+    if (e.button !== 0 || !downPos) return;
+    const dist = Math.hypot(e.clientX - downPos.x, e.clientY - downPos.y);
+    downPos = null;
+    // Only treat as click-to-move when pointer didn't drag
+    if (dist > 6 || state.subgame.busy) return;
+
     const sq = getSquareFromPointer(e);
     if (!sq) return;
 
@@ -1776,7 +1801,7 @@ function setupClickToMove() {
       }
     }
 
-    // 3. Otherwise, if clicked square has a piece of the active turn, select it
+    // 3. Otherwise, if clicked square has a piece of the active turn, select it & show all legal moves
     const piece = game.get(sq);
     if (piece && piece.color === game.turn()) {
       showLegalMovesFrom(sq, game);
@@ -1788,21 +1813,24 @@ function setupClickToMove() {
 
 function onSubgameDragStart(source, piece) {
   if (state.subgame.busy) return false;
-  clearMoveSelection();
 
-  if (state.subgame.active && state.subgame.game) {
-    if (state.subgame.game.game_over()) return false;
-    return piece[0] === state.subgame.game.turn();
-  }
-
-  // Allow dragging from main-game mode to start a Subgame seamlessly
-  const game = buildGameAtPly(state.plyIndex);
+  const game = getActiveChessInstance();
   if (game.game_over()) return false;
-  return piece[0] === game.turn();
+  if (piece[0] !== game.turn()) return false;
+
+  // Immediately show every legal move dot while dragging!
+  showLegalMovesFrom(source, game);
+  return true;
 }
 
 function onSubgameDrop(source, target) {
-  if (state.subgame.busy || source === target) return 'snapback';
+  if (state.subgame.busy) return 'snapback';
+  if (source === target) {
+    // Same square release = click; keep selection & dots alive
+    return 'snapback';
+  }
+
+  clearMoveSelection();
 
   if (state.subgame.active && state.subgame.game) {
     const moveObj = state.subgame.game.move({ from: source, to: target, promotion: 'q' });
@@ -1830,7 +1858,7 @@ function onSubgameSnapEnd() {
     }
     return;
   }
-  if (state.subgame.active && state.subgame.game) {
+  if (state.subgame.active && state.subgame.game && !_selectedSquare) {
     state.board.position(state.subgame.game.fen(), false);
   }
 }

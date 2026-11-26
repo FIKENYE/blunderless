@@ -19,7 +19,7 @@
   <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
   <script src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"></script>
 
-  <link rel="stylesheet" href="/static/styles.css?v=13" />
+  <link rel="stylesheet" href="/static/styles.css?v=15" />
 </head>
 
 <body>
@@ -250,6 +250,20 @@
               </thead>
               <tbody id="review-clf-tbody"></tbody>
             </table>
+
+            <!-- Game Rating & ACPL Row -->
+            <div class="game-rating-card">
+              <span class="game-rating-label">Game Rating</span>
+              <span class="review-acc-pill review-acc-white" id="rev-w-rating">—</span>
+              <span class="review-vs-col"></span>
+              <span class="review-acc-pill review-acc-black" id="rev-b-rating">—</span>
+            </div>
+            <div class="game-rating-card">
+              <span class="game-rating-label">Avg CP Loss</span>
+              <span class="review-acc-pill review-acc-white" id="rev-w-acpl">—</span>
+              <span class="review-vs-col"></span>
+              <span class="review-acc-pill review-acc-black" id="rev-b-acpl">—</span>
+            </div>
           </div>
         </div>
       </div>
@@ -378,7 +392,7 @@
   </main>
 
   <script src="/static/pieces.js?v=11"></script>
-  <script src="/static/app.js?v=13"></script>
+  <script src="/static/app.js?v=15"></script>
 </body>
 
 </html>

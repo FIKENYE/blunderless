@@ -579,9 +579,14 @@ body {
   100% { transform: scale(1); opacity: 1; }
 }
 
+.square-badge.clf-brilliant { background: #1B9AAA; }
+.square-badge.clf-great { background: #4A7C9B; }
 .square-badge.clf-best { background: var(--c-best); }
+.square-badge.clf-excellent { background: #5B8C5A; }
+.square-badge.clf-book { background: #A67B5B; }
 .square-badge.clf-inaccuracy { background: var(--c-inaccuracy); }
 .square-badge.clf-mistake { background: var(--c-mistake); }
+.square-badge.clf-miss { background: #D46A5E; }
 .square-badge.clf-blunder { background: var(--c-blunder); }
 
 /* Slim Vertical Board Utility Rail */
@@ -1125,9 +1130,14 @@ body {
   line-height: 1.2;
 }
 
+.move-glyph.glyph-brilliant { color: #1B9AAA; font-weight: 900; }
+.move-glyph.glyph-great { color: #4A7C9B; font-weight: 900; }
 .move-glyph.glyph-best { color: var(--c-best); }
+.move-glyph.glyph-excellent { color: #5B8C5A; }
+.move-glyph.glyph-book { color: #8C5A3C; }
 .move-glyph.glyph-inaccuracy { color: var(--c-inaccuracy); }
 .move-glyph.glyph-mistake { color: var(--c-mistake); }
+.move-glyph.glyph-miss { color: #D46A5E; font-weight: 900; }
 .move-glyph.glyph-blunder { color: var(--c-blunder); font-weight: 900; }
 
 .move-loss {
@@ -1537,10 +1547,15 @@ body {
   border: 1px solid var(--espresso);
 }
 
+.rt-badge.clf-brilliant { background: #1B9AAA; }
+.rt-badge.clf-great { background: #4A7C9B; }
 .rt-badge.clf-best { background: var(--c-best); }
+.rt-badge.clf-excellent { background: #5B8C5A; }
 .rt-badge.clf-good { background: var(--c-good); }
+.rt-badge.clf-book { background: #A67B5B; }
 .rt-badge.clf-inaccuracy { background: var(--c-inaccuracy); }
 .rt-badge.clf-mistake { background: var(--c-mistake); }
+.rt-badge.clf-miss { background: #D46A5E; }
 .rt-badge.clf-blunder { background: var(--c-blunder); }
 
 .review-cnt-btn {
@@ -1570,6 +1585,27 @@ body {
 .review-cnt-btn.filter-active {
   background: var(--espresso);
   color: var(--canvas);
+}
+
+.game-rating-card {
+  display: grid;
+  grid-template-columns: 1fr 72px 20px 72px;
+  align-items: center;
+  gap: 6px;
+  border: 1.5px solid var(--espresso);
+  border-radius: 2px;
+  background: #FFFDF9;
+  padding: 8px 10px;
+}
+
+.game-rating-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--espresso);
+}
+
+.game-rating-card .review-acc-pill {
+  text-align: center;
 }
 
 /* Info Cards */
