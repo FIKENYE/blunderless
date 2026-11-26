@@ -12,59 +12,17 @@
 
 'use strict';
 
-// ── High-Precision Staunton Vector Pieces (No Thick White Stickers) ──
-const PIECE_SVGS = (() => {
-  const W_FILL = '#FAF6F0';
-  const W_STRK = '#2B1A12';
-  const B_FILL = '#22150E'; // Deep roasted espresso
-  const B_LINE = '#D8C8B8'; // Warm subtle cream interior detailing
 
-  const makeSvg = (inner) =>
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 45 45" shape-rendering="geometricPrecision">${inner}</svg>`;
-
-  const pieces = {
-    // Pawn
-    wP: makeSvg(`<path d="M22.5 9c-2.21 0-4 1.79-4 4 0 .89.29 1.71.78 2.38C17.33 16.5 16 18.59 16 21c0 2.03.94 3.84 2.41 5.03-3 1.06-7.41 5.55-7.41 13.47h23c0-7.92-4.41-12.41-7.41-13.47 1.47-1.19 2.41-3 2.41-5.03 0-2.41-1.33-4.5-3.28-5.62.49-.67.78-1.49.78-2.38 0-2.21-1.79-4-4-4z" fill="${W_FILL}" stroke="${W_STRK}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>`),
-    bP: makeSvg(`<g fill="${B_FILL}" stroke="${B_FILL}" stroke-width="0.8"><path d="M22.5 9c-2.21 0-4 1.79-4 4 0 .89.29 1.71.78 2.38C17.33 16.5 16 18.59 16 21c0 2.03.94 3.84 2.41 5.03-3 1.06-7.41 5.55-7.41 13.47h23c0-7.92-4.41-12.41-7.41-13.47 1.47-1.19 2.41-3 2.41-5.03 0-2.41-1.33-4.5-3.28-5.62.49-.67.78-1.49.78-2.38 0-2.21-1.79-4-4-4z"/><circle cx="22.5" cy="13" r="2" fill="none" stroke="${B_LINE}" stroke-width="1.1"/><path d="M19.5 24.5c1.8-.8 4.2-.8 6 0" fill="none" stroke="${B_LINE}" stroke-width="1.1" stroke-linecap="round"/></g>`),
-
-    // Rook
-    wR: makeSvg(`<g fill="${W_FILL}" stroke="${W_STRK}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 39h27v-3H9v3zM12 36v-4h21v4H12zM11 14V9h4v2h5V9h5v2h5V9h4v5"/><path d="M34 14l-3 3H14l-3-3"/><path d="M31 17v12.5H14V17"/><path d="M31 29.5l1.5 2.5h-20l1.5-2.5"/><path d="M11 14h23" fill="none"/></g>`),
-    bR: makeSvg(`<g fill="${B_FILL}" stroke="${B_FILL}" stroke-width="0.8" stroke-linejoin="round"><path d="M9 39h27v-3H9v3zM12.5 32l1.5-2.5h17l1.5 2.5h-20zM12 36v-4h21v4H12z"/><path d="M14 29.5v-13h17v13H14z"/><path d="M14 16.5L11 14h23l-3 2.5H14zM11 14V9h4v2h5V9h5v2h5V9h4v5H11z"/><path d="M12 35.5h21M13 31.5h19M14 29.5h17M14 16.5h17M11 14h23" fill="none" stroke="${B_LINE}" stroke-width="1.1" stroke-linecap="round"/></g>`),
-
-    // Knight
-    wN: makeSvg(`<g fill="${W_FILL}" stroke="${W_STRK}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10c10.5 1 16.5 8 16 29H15c0-9 10-6.5 8-21"/><path d="M24 18c.38 2.91-5.55 7.37-8 9-3 2-2.82 4.34-5 4-1.042-.94 1.41-3.04 0-3-1 0 .19 1.23-1 2-1 0-4.003 1-4-4 0-2 6-12 6-12s1.89-1.9 2-3.5c-.73-.994-.5-2-.5-3 1-1 3 2.5 3 2.5h2s.78-1.992 2.5-3c1 0 1 3 1 3"/><circle cx="15" cy="14.5" r="1.2" fill="${W_STRK}" stroke="none"/></g>`),
-    bN: makeSvg(`<g fill="${B_FILL}" stroke="${B_FILL}" stroke-width="0.8" stroke-linejoin="round"><path d="M22 10c10.5 1 16.5 8 16 29H15c0-9 10-6.5 8-21"/><path d="M24 18c.38 2.91-5.55 7.37-8 9-3 2-2.82 4.34-5 4-1.042-.94 1.41-3.04 0-3-1 0 .19 1.23-1 2-1 0-4.003 1-4-4 0-2 6-12 6-12s1.89-1.9 2-3.5c-.73-.994-.5-2-.5-3 1-1 3 2.5 3 2.5h2s.78-1.992 2.5-3c1 0 1 3 1 3"/><circle cx="15" cy="14.5" r="1.2" fill="${B_LINE}" stroke="none"/><path d="M24 18c.38 2.91-5.55 7.37-8 9M18 13.5c2 2 3.5 5 4 8" fill="none" stroke="${B_LINE}" stroke-width="1.1" stroke-linecap="round"/></g>`),
-
-    // Bishop
-    wB: makeSvg(`<g fill="${W_FILL}" stroke="${W_STRK}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 36c3.39-.97 10.11.43 13.5-2 3.39 2.43 10.11 1.03 13.5 2 0 0 1.65.54 3 2-.68.97-1.65.99-3 .5-3.39-.97-10.11.46-13.5-1-3.39 1.46-10.11.03-13.5 1-1.354.49-2.323.47-3-.5 1.354-1.94 3-2 3-2z"/><path d="M15 32c2.5 2.5 12.5 2.5 15 0 .5-1.5 0-2 0-2 0-2.5-2.5-4-2.5-4 5.5-1.5 6-11.5-5-15.5-11 4-10.5 14-5 15.5 0 0-2.5 1.5-2.5 4 0 0-.5.5 0 2z"/><circle cx="22.5" cy="8" r="2.5"/><path d="M17.5 26h10M15 30h15M22.5 15.5v5M20 18h5" fill="none"/></g>`),
-    bB: makeSvg(`<g fill="${B_FILL}" stroke="${B_FILL}" stroke-width="0.8" stroke-linejoin="round"><path d="M9 36c3.39-.97 10.11.43 13.5-2 3.39 2.43 10.11 1.03 13.5 2 0 0 1.65.54 3 2-.68.97-1.65.99-3 .5-3.39-.97-10.11.46-13.5-1-3.39 1.46-10.11.03-13.5 1-1.354.49-2.323.47-3-.5 1.354-1.94 3-2 3-2z"/><path d="M15 32c2.5 2.5 12.5 2.5 15 0 .5-1.5 0-2 0-2 0-2.5-2.5-4-2.5-4 5.5-1.5 6-11.5-5-15.5-11 4-10.5 14-5 15.5 0 0-2.5 1.5-2.5 4 0 0-.5.5 0 2z"/><circle cx="22.5" cy="8" r="2.5"/><path d="M17.5 26h10M15 30h15M22.5 15.5v5M20 18h5" fill="none" stroke="${B_LINE}" stroke-width="1.1" stroke-linecap="round"/></g>`),
-
-    // Queen
-    wQ: makeSvg(`<g fill="${W_FILL}" stroke="${W_STRK}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="12" r="2.2"/><circle cx="14" cy="9" r="2.2"/><circle cx="22.5" cy="8" r="2.2"/><circle cx="31" cy="9" r="2.2"/><circle cx="39" cy="12" r="2.2"/><path d="M9 26c8.5-1.5 21-1.5 27 0l2-12-7 11V11l-5.5 13.5-3-15-3 15-5.5-14V25L7 14l2 12z"/><path d="M9 26c0 2 1.5 2 2.5 4 1 1.5 1 1 .5 3.5-1.5 1-1.5 2.5-1.5 2.5-1.5 1.5.5 2.5.5 2.5 6.5 1 16.5 1 23 0 0 0 1.5-1 0-2.5 0 0 .5-1.5-1-2.5-.5-2.5-.5-2 .5-3.5 1-2 2.5-2 2.5-4-8.5-1.5-18.5-1.5-27 0z"/><path d="M11.5 30c3.5-1 18.5-1 22 0M12 33.5c6-1 15-1 21 0" fill="none"/></g>`),
-    bQ: makeSvg(`<g fill="${B_FILL}" stroke="${B_FILL}" stroke-width="0.8" stroke-linejoin="round"><circle cx="6" cy="12" r="2.2"/><circle cx="14" cy="9" r="2.2"/><circle cx="22.5" cy="8" r="2.2"/><circle cx="31" cy="9" r="2.2"/><circle cx="39" cy="12" r="2.2"/><path d="M9 26c8.5-1.5 21-1.5 27 0l2.5-12.5L31 25l-.3-14.1-5.2 13.6-3-14.5-3 14.5-5.2-13.6L14 25 6.5 13.5 9 26z"/><path d="M9 26c0 2 1.5 2 2.5 4 1 1.5 1 1 .5 3.5-1.5 1-1.5 2.5-1.5 2.5-1.5 1.5.5 2.5.5 2.5 6.5 1 16.5 1 23 0 0 0 1.5-1 0-2.5 0 0 .5-1.5-1-2.5-.5-2.5-.5-2 .5-3.5 1-2 2.5-2 2.5-4-8.5-1.5-18.5-1.5-27 0z"/><path d="M11.5 30c3.5-1 18.5-1 22 0M12 33.5c6-1 15-1 21 0" fill="none" stroke="${B_LINE}" stroke-width="1.1" stroke-linecap="round"/></g>`),
-
-    // King
-    wK: makeSvg(`<g fill="${W_FILL}" stroke="${W_STRK}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M22.5 11.63V6M20 8h5" fill="none"/><path d="M22.5 25s4.5-7.5 3-10.5c0 0-1-2.5-3-2.5s-3 2.5-3 2.5c-1.5 3 3 10.5 3 10.5"/><path d="M11.5 37c5.5 3.5 15.5 3.5 21 0v-7s9-4.5 6-10.5c-4-6.5-13.5-3.5-16 4V27v-3.5c-3.5-7.5-13-10.5-16-4-3 6 5 10 5 10V37z"/><path d="M11.5 30c5.5-3 15.5-3 21 0m-21 3.5c5.5-3 15.5-3 21 0m-21 3.5c5.5-3 15.5-3 21 0" fill="none"/></g>`),
-    bK: makeSvg(`<g fill="${B_FILL}" stroke="${B_FILL}" stroke-width="0.8" stroke-linejoin="round"><path d="M22.5 11.63V6M20 8h5" fill="none" stroke="${B_LINE}" stroke-width="1.6" stroke-linecap="round"/><path d="M22.5 25s4.5-7.5 3-10.5c0 0-1-2.5-3-2.5s-3 2.5-3 2.5c-1.5 3 3 10.5 3 10.5"/><path d="M11.5 37c5.5 3.5 15.5 3.5 21 0v-7s9-4.5 6-10.5c-4-6.5-13.5-3.5-16 4V27v-3.5c-3.5-7.5-13-10.5-16-4-3 6 5 10 5 10V37z"/><path d="M11.5 30c5.5-3 15.5-3 21 0m-21 3.5c5.5-3 15.5-3 21 0m-21 3.5c5.5-3 15.5-3 21 0" fill="none" stroke="${B_LINE}" stroke-width="1.1" stroke-linecap="round"/></g>`),
-  };
-
-  const uris = {};
-  for (const [k, svg] of Object.entries(pieces)) {
-    uris[k] = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
-  }
-  return uris;
-})();
-
-// ── Loud, Creamy/Clacky Mechanical Keyboard ASMR Audio Engine ─
+// ── Realistic Wooden Piece-on-Piece Clack Sound Engine ───────
 /**
- * Procedural 3-layer mechanical switch synthesizer:
+ * Procedural 3-layer hardwood chess piece synthesizer:
  *  - Master compressor (-12dB, ratio 6) + gain (0.85)
- *  - Layer 1 (Creamy Thock): 240Hz -> 85Hz sweep over 45ms through 420Hz LPF
- *  - Layer 2 (Clacky Stem Impact): 18ms noise burst through 1850Hz BPF (Q 2.8)
- *  - Layer 3 (Transient Snap): 6ms high-frequency impulse click at 3200Hz
- *  - Pitch jitter (+-4%)
+ *  - Layer 1 (Wood Body Thud): 185Hz -> 72Hz triangle sweep over 42ms through 380Hz LPF
+ *  - Layer 2 (Board Resonance): 320Hz resonant knock (Q 4.2) for hollow wood-board warmth
+ *  - Layer 3 (Hardwood Contact): 12ms filtered noise burst (1350Hz BPF, Q 2.4) + 5ms wood snap
+ *  - Pitch jitter (+-4%) for organic hand-placed feel
  */
-class MechanicalAsmrEngine {
+class WoodenClackEngine {
   constructor() {
     this._ctx = null;
     this._masterGain = null;
@@ -77,14 +35,12 @@ class MechanicalAsmrEngine {
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
       this._ctx = new AudioCtx();
 
-      // Dynamics compressor to let audio punch without clipping
       this._compressor = this._ctx.createDynamicsCompressor();
       this._compressor.threshold.setValueAtTime(-12, this._ctx.currentTime);
       this._compressor.ratio.setValueAtTime(6, this._ctx.currentTime);
-      this._compressor.attack.setValueAtTime(0.003, this._ctx.currentTime);
+      this._compressor.attack.setValueAtTime(0.002, this._ctx.currentTime);
       this._compressor.release.setValueAtTime(0.05, this._ctx.currentTime);
 
-      // Loud master gain (0.85)
       this._masterGain = this._ctx.createGain();
       this._masterGain.gain.setValueAtTime(0.85, this._ctx.currentTime);
 
@@ -97,26 +53,26 @@ class MechanicalAsmrEngine {
     return this._ctx;
   }
 
-  /** Synthesise a single creamy/clacky switch impact */
-  _synthesizeClack(pitchMod = 1.0, vol = 1.0) {
+  /** Synthesise a single hardwood piece-on-board clack */
+  _woodClack(pitchMod = 1.0, vol = 1.0) {
     if (!this.enabled) return;
     const ctx = this._init();
     const now = ctx.currentTime;
     const jitter = (0.96 + Math.random() * 0.08) * pitchMod;
 
-    // ── Layer 1: Creamy Bottom-Out Thock (Triangle low sweep) ──
+    // ── Layer 1: Weighted Wood Base Thud ──
     const osc = ctx.createOscillator();
     const oscGain = ctx.createGain();
     const oscFilter = ctx.createBiquadFilter();
 
     osc.type = 'triangle';
-    osc.frequency.setValueAtTime(240 * jitter, now);
-    osc.frequency.exponentialRampToValueAtTime(85 * jitter, now + 0.045);
+    osc.frequency.setValueAtTime(185 * jitter, now);
+    osc.frequency.exponentialRampToValueAtTime(72 * jitter, now + 0.042);
 
     oscFilter.type = 'lowpass';
-    oscFilter.frequency.setValueAtTime(420, now);
+    oscFilter.frequency.setValueAtTime(380, now);
 
-    oscGain.gain.setValueAtTime(0.75 * vol, now);
+    oscGain.gain.setValueAtTime(0.8 * vol, now);
     oscGain.gain.exponentialRampToValueAtTime(0.001, now + 0.045);
 
     osc.connect(oscFilter);
@@ -124,51 +80,52 @@ class MechanicalAsmrEngine {
     oscGain.connect(this._compressor);
 
     osc.start(now);
-    osc.stop(now + 0.046);
+    osc.stop(now + 0.048);
 
-    // ── Layer 2: Clacky Stem Impact (18ms noise burst) ──
-    const noiseBuf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 0.02), ctx.sampleRate);
+    // ── Layer 2: Hollow Wood Board Knock Resonance ──
+    const knockOsc = ctx.createOscillator();
+    const knockGain = ctx.createGain();
+    knockOsc.type = 'sine';
+    knockOsc.frequency.setValueAtTime(315 * jitter, now);
+    knockOsc.frequency.exponentialRampToValueAtTime(160 * jitter, now + 0.028);
+
+    knockGain.gain.setValueAtTime(0.45 * vol, now);
+    knockGain.gain.exponentialRampToValueAtTime(0.001, now + 0.03);
+
+    knockOsc.connect(knockGain);
+    knockGain.connect(this._compressor);
+
+    knockOsc.start(now);
+    knockOsc.stop(now + 0.032);
+
+    // ── Layer 3: Dry Hardwood Contact Transient ──
+    const noiseBuf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 0.014), ctx.sampleRate);
     const noiseData = noiseBuf.getChannelData(0);
     for (let i = 0; i < noiseData.length; i++) {
-      const env = Math.pow(1 - i / noiseData.length, 3.2);
+      const env = Math.pow(1 - i / noiseData.length, 3.6);
       noiseData[i] = (Math.random() * 2 - 1) * env;
     }
     const noiseSrc = ctx.createBufferSource();
     noiseSrc.buffer = noiseBuf;
 
-    const stemFilter = ctx.createBiquadFilter();
-    stemFilter.type = 'bandpass';
-    stemFilter.frequency.setValueAtTime(1850 * jitter, now);
-    stemFilter.Q.setValueAtTime(2.8, now);
+    const woodFilter = ctx.createBiquadFilter();
+    woodFilter.type = 'bandpass';
+    woodFilter.frequency.setValueAtTime(1350 * jitter, now);
+    woodFilter.Q.setValueAtTime(2.4, now);
 
-    const stemGain = ctx.createGain();
-    stemGain.gain.setValueAtTime(0.65 * vol, now);
-    stemGain.gain.exponentialRampToValueAtTime(0.001, now + 0.018);
+    const woodGain = ctx.createGain();
+    woodGain.gain.setValueAtTime(0.7 * vol, now);
+    woodGain.gain.exponentialRampToValueAtTime(0.001, now + 0.013);
 
-    noiseSrc.connect(stemFilter);
-    stemFilter.connect(stemGain);
-    stemGain.connect(this._compressor);
+    noiseSrc.connect(woodFilter);
+    woodFilter.connect(woodGain);
+    woodGain.connect(this._compressor);
 
     noiseSrc.start(now);
-    noiseSrc.stop(now + 0.02);
-
-    // ── Layer 3: Keycap Transient Snap (6ms high impulse) ──
-    const snapOsc = ctx.createOscillator();
-    const snapGain = ctx.createGain();
-    snapOsc.type = 'sine';
-    snapOsc.frequency.setValueAtTime(3200 * jitter, now);
-
-    snapGain.gain.setValueAtTime(0.4 * vol, now);
-    snapGain.gain.exponentialRampToValueAtTime(0.001, now + 0.006);
-
-    snapOsc.connect(snapGain);
-    snapGain.connect(this._compressor);
-
-    snapOsc.start(now);
-    snapOsc.stop(now + 0.007);
+    noiseSrc.stop(now + 0.015);
   }
 
-  /** Soft muted chime for check & checkmate */
+  /** Soft wooden chime for check & checkmate */
   _chime(f1 = 520, f2 = 780, dur = 0.14) {
     if (!this.enabled) return;
     const ctx = this._init();
@@ -179,7 +136,7 @@ class MechanicalAsmrEngine {
       const gain = ctx.createGain();
       osc.type = 'sine';
       osc.frequency.setValueAtTime(freq, now);
-      gain.gain.setValueAtTime(0.25, now);
+      gain.gain.setValueAtTime(0.22, now);
       gain.gain.exponentialRampToValueAtTime(0.001, now + dur);
       osc.connect(gain);
       gain.connect(this._compressor);
@@ -190,35 +147,40 @@ class MechanicalAsmrEngine {
 
   /** Normal Move */
   move() {
-    this._synthesizeClack(1.0, 1.0);
+    this._woodClack(1.0, 1.0);
   }
 
-  /** Capture (x): Double-tap clack 28ms apart */
+  /** Reverse / Step-Back Move: crisp slightly softer wooden clack */
+  reverse() {
+    this._woodClack(0.92, 0.82);
+  }
+
+  /** Capture (x): Piece-on-piece double-clack (24ms apart) */
   capture() {
-    this._synthesizeClack(1.08, 0.95);
-    setTimeout(() => this._synthesizeClack(0.92, 1.1), 28);
+    this._woodClack(1.16, 0.85);
+    setTimeout(() => this._woodClack(0.88, 1.12), 24);
   }
 
-  /** Castling (O-O): Two rapid clacks 45ms apart */
+  /** Castling (O-O): Two wooden piece placements 55ms apart */
   castle() {
-    this._synthesizeClack(1.0, 0.9);
-    setTimeout(() => this._synthesizeClack(0.95, 0.95), 45);
+    this._woodClack(1.02, 0.9);
+    setTimeout(() => this._woodClack(0.94, 0.96), 55);
   }
 
-  /** Check (+): Clack + soft dual chime */
+  /** Check (+): Crisp clack + muted dual chime */
   check() {
-    this._synthesizeClack(1.15, 1.0);
+    this._woodClack(1.12, 1.0);
     this._chime(520, 780, 0.14);
   }
 
-  /** Checkmate (#) / Game End: Deeper clack + resolving chime */
+  /** Checkmate (#) / Game End: Deep wood thud + resolving chime */
   gameEnd() {
-    this._synthesizeClack(0.85, 1.2);
+    this._woodClack(0.84, 1.18);
     setTimeout(() => this._chime(390, 650, 0.22), 35);
   }
 }
 
-const sounds = new MechanicalAsmrEngine();
+const sounds = new WoodenClackEngine();
 
 // ── State ───────────────────────────────────────────────────
 const state = {
@@ -227,15 +189,24 @@ const state = {
   initialFen: null,
   initialEval: null,
   orientation: 'white',
+  boardFlipped: false,
+  searchedUser: '',
   board: null,
   activeFilter: null,
   showCoords: true,
+  showBestMove: false,
+  isPreviewingBest: false,
+  initialBestMove: null,
+  initialBestMoveSan: null,
+  topLines: [],
   engineLinesExpanded: true,
   selectedDb: 'masters', // 'masters' or 'lichess'
   lastKnownOpening: 'Starting Position',
   lastKnownEco: '',
   lastBookPly: 0,
   isOutOfBook: false,
+  userHighlights: new Map(), // sq -> css rgba color
+  userArrows: [],            // [{ from, to, color, outline }]
   headers: {
     white: 'White', black: 'Black',
     white_elo: '', black_elo: '',
@@ -540,12 +511,14 @@ function initBoard() {
   state.board = Chessboard('board', {
     position: 'start',
     orientation: state.orientation,
-    pieceTheme: (piece) => PIECE_SVGS[piece],
+    pieceTheme: (piece) => window.BlunderlessPieces.getDataUri(piece),
     draggable: false,
     moveSpeed: 150,
     snapbackSpeed: 120,
     snapSpeed: 60,
   });
+
+
 
   const boardEl = $('board');
   const evalShell = $('eval-bar-shell');
@@ -579,6 +552,278 @@ function initBoard() {
 
   window.addEventListener('resize', resize);
   setTimeout(resize, 50);
+  setupBoardAnnotations();
+}
+
+// ── Right-Click Square Highlights & Editorial SVG Arrows ─────
+function getAnnotationStyle(e) {
+  if (e.shiftKey) {
+    return {
+      sq: 'rgba(46, 111, 64, 0.45)',
+      arrow: '#2E6F40',
+    };
+  }
+  if (e.altKey) {
+    return {
+      sq: 'rgba(196, 132, 29, 0.45)',
+      arrow: '#C4841D',
+    };
+  }
+  if (e.ctrlKey || e.metaKey) {
+    return {
+      sq: 'rgba(107, 91, 149, 0.45)',
+      arrow: '#6B5B95',
+    };
+  }
+  return {
+    sq: 'rgba(200, 90, 40, 0.45)',
+    arrow: '#C85A28',
+  };
+}
+
+function getSquareFromPointer(e) {
+  const sqEl = e.target.closest('[data-square]');
+  if (sqEl && sqEl.dataset.square) return sqEl.dataset.square;
+
+  const boardInner = $('board').querySelector('.board-b72b1') || $('board');
+  const rect = boardInner.getBoundingClientRect();
+  if (
+    e.clientX < rect.left || e.clientX > rect.right ||
+    e.clientY < rect.top || e.clientY > rect.bottom
+  ) {
+    return null;
+  }
+
+  const col = Math.min(7, Math.max(0, Math.floor(((e.clientX - rect.left) / rect.width) * 8)));
+  const row = Math.min(7, Math.max(0, Math.floor(((e.clientY - rect.top) / rect.height) * 8)));
+  const fileIdx = state.orientation === 'white' ? col : 7 - col;
+  const rankIdx = state.orientation === 'white' ? 7 - row : row;
+  return String.fromCharCode(97 + fileIdx) + (rankIdx + 1);
+}
+
+function squareToGrid(sq) {
+  const fileIdx = sq.charCodeAt(0) - 97;
+  const rankIdx = parseInt(sq[1], 10) - 1;
+  const col = state.orientation === 'white' ? fileIdx : 7 - fileIdx;
+  const row = state.orientation === 'white' ? 7 - rankIdx : rankIdx;
+  return { col, row, x: col * 100 + 50, y: row * 100 + 50 };
+}
+
+function renderUserHighlights() {
+  $('board').querySelectorAll('.user-sq-highlight').forEach(el => el.remove());
+  for (const [sq, color] of state.userHighlights.entries()) {
+    const sqEl = $('board').querySelector(`[data-square="${sq}"]`);
+    if (sqEl) {
+      const hl = document.createElement('div');
+      hl.className = 'user-sq-highlight';
+      hl.style.backgroundColor = color;
+      sqEl.appendChild(hl);
+    }
+  }
+}
+
+function buildArrowPath(fromSq, toSq) {
+  const p1 = squareToGrid(fromSq);
+  const p2 = squareToGrid(toSq);
+  const dCol = p2.col - p1.col;
+  const dRow = p2.row - p1.row;
+  const isKnight =
+    (Math.abs(dCol) === 1 && Math.abs(dRow) === 2) ||
+    (Math.abs(dCol) === 2 && Math.abs(dRow) === 1);
+
+  const hw = 7;   // 14px shaft width
+  const hhw = 17; // 34px head width
+  // Head length 32px: tip at +8px past target center, base at -24px
+
+  if (isKnight) {
+    const elbowX = Math.abs(dCol) === 2 ? p2.x : p1.x;
+    const elbowY = Math.abs(dCol) === 2 ? p1.y : p2.y;
+
+    const len1 = Math.hypot(elbowX - p1.x, elbowY - p1.y) || 1;
+    const u1x = (elbowX - p1.x) / len1;
+    const u1y = (elbowY - p1.y) / len1;
+    const n1x = -u1y;
+    const n1y = u1x;
+
+    const len2 = Math.hypot(p2.x - elbowX, p2.y - elbowY) || 1;
+    const u2x = (p2.x - elbowX) / len2;
+    const u2y = (p2.y - elbowY) / len2;
+    const n2x = -u2y;
+    const n2y = u2x;
+
+    const sx = p1.x + 18 * u1x;
+    const sy = p1.y + 18 * u1y;
+    const bx = p2.x - 24 * u2x;
+    const by = p2.y - 24 * u2y;
+    const tx = p2.x + 8 * u2x;
+    const ty = p2.y + 8 * u2y;
+
+    // Exact mitered inner/outer elbow corners
+    const c1x = elbowX + hw * n1x + hw * n2x;
+    const c1y = elbowY + hw * n1y + hw * n2y;
+    const c2x = elbowX - hw * n1x - hw * n2x;
+    const c2y = elbowY - hw * n1y - hw * n2y;
+
+    return [
+      `M ${(sx + hw * n1x).toFixed(1)} ${(sy + hw * n1y).toFixed(1)}`,
+      `L ${c1x.toFixed(1)} ${c1y.toFixed(1)}`,
+      `L ${(bx + hw * n2x).toFixed(1)} ${(by + hw * n2y).toFixed(1)}`,
+      `L ${(bx + hhw * n2x).toFixed(1)} ${(by + hhw * n2y).toFixed(1)}`,
+      `L ${tx.toFixed(1)} ${ty.toFixed(1)}`,
+      `L ${(bx - hhw * n2x).toFixed(1)} ${(by - hhw * n2y).toFixed(1)}`,
+      `L ${(bx - hw * n2x).toFixed(1)} ${(by - hw * n2y).toFixed(1)}`,
+      `L ${c2x.toFixed(1)} ${c2y.toFixed(1)}`,
+      `L ${(sx - hw * n1x).toFixed(1)} ${(sy - hw * n1y).toFixed(1)}`,
+      'Z',
+    ].join(' ');
+  }
+
+  const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x);
+  const ux = Math.cos(angle);
+  const uy = Math.sin(angle);
+  const px = -uy;
+  const py = ux;
+
+  const sx = p1.x + 18 * ux;
+  const sy = p1.y + 18 * uy;
+  const bx = p2.x - 24 * ux;
+  const by = p2.y - 24 * uy;
+  const tx = p2.x + 8 * ux;
+  const ty = p2.y + 8 * uy;
+
+  return [
+    `M ${(sx + hw * px).toFixed(1)} ${(sy + hw * py).toFixed(1)}`,
+    `L ${(bx + hw * px).toFixed(1)} ${(by + hw * py).toFixed(1)}`,
+    `L ${(bx + hhw * px).toFixed(1)} ${(by + hhw * py).toFixed(1)}`,
+    `L ${tx.toFixed(1)} ${ty.toFixed(1)}`,
+    `L ${(bx - hhw * px).toFixed(1)} ${(by - hhw * py).toFixed(1)}`,
+    `L ${(bx - hw * px).toFixed(1)} ${(by - hw * py).toFixed(1)}`,
+    `L ${(sx - hw * px).toFixed(1)} ${(sy - hw * py).toFixed(1)}`,
+    'Z',
+  ].join(' ');
+}
+
+function getBestMoveForCurrentPly() {
+  if (state.plyIndex === 0) {
+    return state.initialBestMove || null;
+  }
+  const m = state.moves[state.plyIndex - 1];
+  if (!m || !m.best_move) return null;
+  if (m.uci === m.best_move || m.classification === 'best') return null;
+  return m.best_move;
+}
+
+function renderBoardArrows() {
+  const svg = $('board-arrows');
+  if (!svg) return;
+  svg.innerHTML = '';
+
+  const ns = 'http://www.w3.org/2000/svg';
+
+  const drawSingleArrow = (fromSq, toSq, color, isCoachBest = false) => {
+    const pathD = buildArrowPath(fromSq, toSq);
+    const group = document.createElementNS(ns, 'g');
+    group.setAttribute('opacity', '0.82');
+
+    if (isCoachBest) {
+      const p1 = squareToGrid(fromSq);
+      const ring = document.createElementNS(ns, 'circle');
+      ring.setAttribute('cx', p1.x);
+      ring.setAttribute('cy', p1.y);
+      ring.setAttribute('r', '8');
+      ring.setAttribute('fill', color);
+      ring.setAttribute('class', 'board-arrow-shape');
+      group.appendChild(ring);
+    }
+
+    const shape = document.createElementNS(ns, 'path');
+    shape.setAttribute('d', pathD);
+    shape.setAttribute('fill', color);
+    shape.setAttribute('class', 'board-arrow-shape');
+    group.appendChild(shape);
+
+    svg.appendChild(group);
+  };
+
+  // Engine / Coach Best Move Arrow (when active & played move !== best move)
+  if (state.showBestMove && !state.isPreviewingBest) {
+    const bestUci = getBestMoveForCurrentPly();
+    if (bestUci && bestUci.length >= 4) {
+      drawSingleArrow(bestUci.slice(0, 2), bestUci.slice(2, 4), '#2E6F40', true);
+    }
+  }
+
+  // User Right-Click Annotations
+  for (const arrow of state.userArrows) {
+    drawSingleArrow(arrow.from, arrow.to, arrow.color, false);
+  }
+}
+
+function renderUserArrows() {
+  renderBoardArrows();
+}
+
+function clearAnnotations() {
+  if (state.userHighlights.size === 0 && state.userArrows.length === 0) return;
+  state.userHighlights.clear();
+  state.userArrows = [];
+  renderUserHighlights();
+  renderUserArrows();
+}
+
+function setupBoardAnnotations() {
+  const boardWrap = $('board-wrap');
+  if (!boardWrap) return;
+
+  let rightDragStartSq = null;
+
+  boardWrap.addEventListener('contextmenu', e => {
+    e.preventDefault();
+  });
+
+  boardWrap.addEventListener('mousedown', e => {
+    if (e.button === 0) {
+      clearAnnotations();
+      return;
+    }
+    if (e.button === 2) {
+      rightDragStartSq = getSquareFromPointer(e);
+    }
+  });
+
+  window.addEventListener('mouseup', e => {
+    if (e.button !== 2 || !rightDragStartSq) return;
+    const startSq = rightDragStartSq;
+    rightDragStartSq = null;
+
+    const endSq = getSquareFromPointer(e);
+    if (!endSq) return;
+
+    const style = getAnnotationStyle(e);
+
+    if (startSq === endSq) {
+      if (state.userHighlights.get(endSq) === style.sq) {
+        state.userHighlights.delete(endSq);
+      } else {
+        state.userHighlights.set(endSq, style.sq);
+      }
+      renderUserHighlights();
+    } else {
+      const existingIdx = state.userArrows.findIndex(
+        a => a.from === startSq && a.to === endSq && a.color === style.arrow
+      );
+      if (existingIdx !== -1) {
+        state.userArrows.splice(existingIdx, 1);
+      } else {
+        // Remove any different-color arrow on same pair before adding
+        state.userArrows = state.userArrows.filter(
+          a => !(a.from === startSq && a.to === endSq)
+        );
+        state.userArrows.push({ from: startSq, to: endSq, color: style.arrow });
+      }
+      renderUserArrows();
+    }
+  });
 }
 
 // ── Last-Move Highlighting & Square Badges ───────────────────
@@ -623,6 +868,11 @@ function goToPly(ply) {
 
   const prevPly = state.plyIndex;
   state.plyIndex = ply;
+  state.isPreviewingBest = false;
+
+  if (ply !== prevPly) {
+    clearAnnotations();
+  }
 
   const tmpGame = new Chess();
   if (state.initialFen) tmpGame.load(state.initialFen);
@@ -633,24 +883,34 @@ function goToPly(ply) {
   const currentFen = tmpGame.fen();
   state.board.position(currentFen, true);
 
-  if (ply > 0) {
-    const moveData = state.moves[ply - 1];
+  const moveData = ply > 0 ? state.moves[ply - 1] : null;
+  if (moveData) {
     const uci = moveData.uci;
     highlightLastMove(uci.slice(0, 2), uci.slice(2, 4), moveData.classification);
-    if (ply > prevPly) playMoveSound(moveData, tmpGame);
+    if (ply > prevPly) {
+      playMoveSound(moveData, tmpGame);
+    } else if (ply < prevPly) {
+      sounds.reverse();
+    }
     updateEngineLines(moveData.eval_after, moveData.best_move_san);
   } else {
     highlightLastMove(null, null, null);
-    updateEngineLines(state.initialEval, state.moves[0]?.best_move_san);
+    if (ply < prevPly) {
+      sounds.reverse();
+    }
+    updateEngineLines(state.initialEval, state.initialBestMoveSan || state.moves[0]?.best_move_san);
   }
 
   // Update Live Opening Explorer & ECO pill
   updateOpeningDisplay(currentFen);
 
-  const evalScore = ply === 0 ? state.initialEval : state.moves[ply - 1]?.eval_after;
+  const evalScore = ply === 0 ? state.initialEval : moveData?.eval_after;
   if (evalScore) setEvalBar(evalScore);
 
   syncPlayerBars(ply);
+  updateBestMoveUI();
+  renderBoardArrows();
+  updateCoachContext(currentFen, ply, moveData);
 
   document.querySelectorAll('.move-cell').forEach(c => c.classList.remove('active-ply'));
   if (ply > 0) {
@@ -830,6 +1090,9 @@ async function analyseFen(fen) {
 
   state.initialFen = fen;
   state.initialEval = res.engine.score;
+  state.initialBestMove = res.engine.best_move || null;
+  state.initialBestMoveSan = res.engine.best_move_san || null;
+  state.topLines = res.engine.top_lines || [];
   state.moves = [];
   state.plyIndex = 0;
   state.headers = { white: 'White', black: 'Black', white_elo: '', black_elo: '', initial_clock: '--:--' };
@@ -840,6 +1103,9 @@ async function analyseFen(fen) {
   updateEngineLines(res.engine.score, res.engine.best_move_san);
   updateOpeningDisplay(fen);
   syncPlayerBars(0);
+  updateBestMoveUI();
+  renderBoardArrows();
+  updateCoachContext(fen, 0, null);
 
   moveTableBody.innerHTML = '';
   gameHeaders.classList.add('hidden');
@@ -856,6 +1122,9 @@ async function analysePgn(pgn) {
 
   state.initialFen = res.initial_fen;
   state.initialEval = res.initial_eval;
+  state.initialBestMove = res.moves[0]?.best_move || null;
+  state.initialBestMoveSan = res.moves[0]?.best_move_san || null;
+  state.topLines = [];
   state.moves = res.moves;
   state.plyIndex = 0;
   state.headers = res.headers;
@@ -872,6 +1141,12 @@ async function analysePgn(pgn) {
 
   renderMoveList(res.moves);
   emptyMoves.classList.add('hidden');
+
+  // Auto-POV orientation based on searched username
+  const blackPlayer = (res.headers.black || '').trim().toLowerCase();
+  const shouldFlip = Boolean(state.searchedUser && blackPlayer === state.searchedUser);
+  setBoardOrientation(shouldFlip ? 'black' : 'white');
+
   goToPly(0);
   setStatus(`Loaded · ${res.moves.length} half-moves`, 'ok');
   switchTab('moves');
@@ -882,6 +1157,7 @@ async function loadChessComGames(usernameOverride = null) {
   const username = usernameOverride || $('chesscom-input').value.trim() || $('tab-chesscom-input').value.trim();
   if (!username) return;
 
+  state.searchedUser = username.trim().toLowerCase();
   $('chesscom-input').value = username;
   $('tab-chesscom-input').value = username;
 
@@ -927,6 +1203,9 @@ function renderGameCards(games, currentUser) {
         <span>${date}</span>
       </div>`;
     card.addEventListener('click', () => {
+      state.searchedUser = currentUser.trim().toLowerCase();
+      const shouldFlip = g.black.username.toLowerCase() === state.searchedUser;
+      setBoardOrientation(shouldFlip ? 'black' : 'white');
       pgnInput.value = g.pgn;
       runAnalysis(g.pgn);
     });
@@ -976,14 +1255,40 @@ async function fetchApi(path, method = 'GET', body = null) {
   return res.json();
 }
 
-function flipBoard() {
-  state.orientation = state.orientation === 'white' ? 'black' : 'white';
-  state.board.flip();
+function setBoardOrientation(orientation) {
+  const target = orientation === 'black' ? 'black' : 'white';
+  state.boardFlipped = target === 'black';
+  if (state.orientation === target) {
+    syncPlayerBars(state.plyIndex);
+    return;
+  }
+
+  state.orientation = target;
+  state.board.orientation(target);
   syncPlayerBars(state.plyIndex);
+  renderUserHighlights();
+  renderBoardArrows();
+
+  // Re-apply last-move highlight and classification badge after board DOM rebuild
+  if (state.plyIndex > 0) {
+    const moveData = state.moves[state.plyIndex - 1];
+    if (moveData) {
+      highlightLastMove(
+        moveData.uci.slice(0, 2),
+        moveData.uci.slice(2, 4),
+        moveData.classification
+      );
+    }
+  }
+
   const evalScore = state.plyIndex === 0
     ? state.initialEval
     : state.moves[state.plyIndex - 1]?.eval_after;
   if (evalScore) setEvalBar(evalScore);
+}
+
+function flipBoard() {
+  setBoardOrientation(state.orientation === 'white' ? 'black' : 'white');
 }
 
 function toggleSound() {
@@ -1006,6 +1311,175 @@ function toggleEngineLines() {
   $('engine-lines-panel').classList.toggle('collapsed', !state.engineLinesExpanded);
   $('engine-toggle-arrow').textContent = state.engineLinesExpanded ? '▾' : '▸';
 }
+
+// ── Show Best Move & Coach Layer Hook ───────────────────────
+function formatScoreStr(score) {
+  if (!score) return '—';
+  if (score.type === 'mate') {
+    const prefix = score.value > 0 ? '+' : '-';
+    return `${prefix}M${Math.abs(score.value)}`;
+  }
+  const val = score.value / 100;
+  return (val >= 0 ? '+' : '') + val.toFixed(2);
+}
+
+function updateBestMoveUI() {
+  const strip = $('best-move-strip');
+  const textEl = $('best-move-text');
+  const previewBtn = $('btn-preview-best');
+  const railBtn = $('btn-rail-best');
+  const sideBtn = $('btn-show-best');
+
+  if (railBtn) railBtn.classList.toggle('active', state.showBestMove);
+  if (sideBtn) sideBtn.classList.toggle('active', state.showBestMove);
+
+  if (!state.showBestMove) {
+    strip.classList.add('hidden');
+    return;
+  }
+
+  strip.classList.remove('hidden');
+
+  if (state.plyIndex === 0) {
+    const bestSan = state.initialBestMoveSan || state.moves[0]?.best_move_san;
+    if (bestSan) {
+      textEl.textContent = `Best: ${bestSan} (${formatScoreStr(state.initialEval)})`;
+      previewBtn.classList.remove('hidden');
+    } else {
+      textEl.textContent = 'Starting Position';
+      previewBtn.classList.add('hidden');
+    }
+    return;
+  }
+
+  const m = state.moves[state.plyIndex - 1];
+  if (!m) {
+    textEl.textContent = 'No move data';
+    previewBtn.classList.add('hidden');
+    return;
+  }
+
+  if (m.uci === m.best_move || m.classification === 'best') {
+    textEl.textContent = '★ Best move played';
+    previewBtn.classList.add('hidden');
+    return;
+  }
+
+  const playedEvalStr = formatScoreStr(m.eval_after);
+  // Estimate eval of best move from eval_after - eval_change (from mover perspective)
+  let bestEvalStr = '';
+  if (m.eval_after && m.eval_after.type === 'cp' && typeof m.eval_change === 'number') {
+    const sign = m.color === 'white' ? 1 : -1;
+    const bestCp = m.eval_after.value - sign * m.eval_change;
+    bestEvalStr = formatScoreStr({ type: 'cp', value: bestCp });
+  }
+
+  const evalPart = bestEvalStr ? `(${bestEvalStr} vs played ${playedEvalStr})` : `(played ${playedEvalStr})`;
+  textEl.textContent = `Best: ${m.best_move_san || m.best_move || '—'} ${evalPart}`;
+  previewBtn.classList.toggle('hidden', !m.best_move);
+}
+
+function toggleBestMove() {
+  state.showBestMove = !state.showBestMove;
+  if (!state.showBestMove && state.isPreviewingBest) {
+    goToPly(state.plyIndex);
+    return;
+  }
+  updateBestMoveUI();
+  renderBoardArrows();
+
+  const tmpGame = new Chess();
+  if (state.initialFen) tmpGame.load(state.initialFen);
+  for (let i = 0; i < state.plyIndex; i++) {
+    tmpGame.move(state.moves[i].san);
+  }
+  const moveData = state.plyIndex > 0 ? state.moves[state.plyIndex - 1] : null;
+  updateCoachContext(tmpGame.fen(), state.plyIndex, moveData);
+}
+
+function previewBestMove() {
+  const bestUci = getBestMoveForCurrentPly();
+  if (!bestUci || bestUci.length < 4) return;
+
+  const tmpGame = new Chess();
+  if (state.initialFen) tmpGame.load(state.initialFen);
+  const stepsBefore = Math.max(0, state.plyIndex - 1);
+  for (let i = 0; i < stepsBefore; i++) {
+    tmpGame.move(state.moves[i].san);
+  }
+
+  const moveObj = tmpGame.move({
+    from: bestUci.slice(0, 2),
+    to: bestUci.slice(2, 4),
+    promotion: bestUci.slice(4, 5) || 'q',
+  });
+  if (!moveObj) return;
+
+  state.isPreviewingBest = true;
+  state.board.position(tmpGame.fen(), true);
+  highlightLastMove(moveObj.from, moveObj.to, 'best');
+  sounds.move();
+  renderBoardArrows();
+}
+
+function updateCoachContext(fen, ply, moveData) {
+  const cpToEp = (cp) => Number((1 / (1 + Math.exp(-0.00368208 * cp))).toFixed(4));
+  const scoreToCp = (score) => {
+    if (!score) return 0;
+    if (score.type === 'mate') return score.value > 0 ? 10000 : -10000;
+    return score.value;
+  };
+
+  let epBefore = null;
+  let epAfter = null;
+  let epBest = null;
+  let epl = null;
+
+  if (moveData && moveData.eval_after) {
+    const cpAfter = scoreToCp(moveData.eval_after);
+    const sign = moveData.color === 'white' ? 1 : -1;
+    const cpBest = typeof moveData.eval_change === 'number'
+      ? cpAfter - sign * moveData.eval_change
+      : cpAfter;
+    const prevScore = ply > 1 ? state.moves[ply - 2]?.eval_after : state.initialEval;
+    const cpBefore = prevScore ? scoreToCp(prevScore) : cpBest;
+
+    epBefore = cpToEp(cpBefore);
+    epAfter = cpToEp(cpAfter);
+    epBest = cpToEp(cpBest);
+    epl = Number(Math.abs(epBest - epAfter).toFixed(4));
+  } else if (state.initialEval) {
+    const cp = scoreToCp(state.initialEval);
+    epBefore = cpToEp(cp);
+    epAfter = epBefore;
+    epBest = epBefore;
+    epl = 0;
+  }
+
+  const payload = {
+    fen,
+    ply,
+    moveSan: moveData ? moveData.san : null,
+    playedMoveUci: moveData ? moveData.uci : null,
+    bestMoveUci: moveData ? moveData.best_move : state.initialBestMove,
+    bestMoveSan: moveData ? moveData.best_move_san : state.initialBestMoveSan,
+    classification: moveData ? moveData.classification : null,
+    epBefore,
+    epAfter,
+    epBest,
+    epl,
+    topLines: state.topLines,
+  };
+
+  window.BlunderlessCoachContext = payload;
+  window.dispatchEvent(new CustomEvent('blunderless:position-analyzed', { detail: payload }));
+}
+
+window.BlunderlessCoach = {
+  getContext: () => window.BlunderlessCoachContext || null,
+  toggleBestMove,
+  previewBestMove,
+};
 
 function switchDatabase(db) {
   state.selectedDb = db;
@@ -1075,6 +1549,11 @@ document.addEventListener('DOMContentLoaded', () => {
   $('btn-rail-flip').addEventListener('click', flipBoard);
   $('btn-rail-sound').addEventListener('click', toggleSound);
   $('btn-rail-coords').addEventListener('click', toggleCoordinates);
+  $('btn-rail-best').addEventListener('click', toggleBestMove);
+
+  // Best Move Sidebar Controls
+  $('btn-show-best').addEventListener('click', toggleBestMove);
+  $('btn-preview-best').addEventListener('click', previewBestMove);
 
   // Return to last book move button
   $('btn-return-book').addEventListener('click', () => {
@@ -1172,6 +1651,10 @@ document.addEventListener('DOMContentLoaded', () => {
       case 'f':
       case 'F':
         flipBoard();
+        break;
+      case 'b':
+      case 'B':
+        toggleBestMove();
         break;
     }
   });

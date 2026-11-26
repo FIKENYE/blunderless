@@ -19,7 +19,7 @@
   <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
   <script src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"></script>
 
-  <link rel="stylesheet" href="/static/styles.css?v=6" />
+  <link rel="stylesheet" href="/static/styles.css?v=8" />
 </head>
 
 <body>
@@ -65,7 +65,10 @@
 
           <!-- Board Row with board and adjacent utility rail -->
           <div class="board-row">
-            <div id="board" class="chess-board"></div>
+            <div id="board-wrap" class="board-wrap">
+              <div id="board" class="chess-board"></div>
+              <svg id="board-arrows" class="board-arrows-overlay" viewBox="0 0 800 800" aria-hidden="true"></svg>
+            </div>
 
             <!-- Slim Vertical Utility Rail -->
             <nav class="board-utility-rail" aria-label="Board utilities">
@@ -80,6 +83,10 @@
               <button id="btn-rail-coords" class="rail-btn active" title="Toggle Coordinates">
                 <span class="rail-icon">⊞</span>
                 <span class="rail-label">COORD</span>
+              </button>
+              <button id="btn-rail-best" class="rail-btn" title="Show Best Move (B)">
+                <span class="rail-icon">★</span>
+                <span class="rail-label">BEST</span>
               </button>
             </nav>
           </div>
@@ -132,6 +139,14 @@
             <span class="line-pv-score" id="pv3-score">+0.08</span>
             <span class="line-pv-moves" id="pv3-moves">1. Nf3 d5 2. g3 Nf6 3. Bg2</span>
           </div>
+        </div>
+        <!-- Best Move Strip (visible when BEST is active) -->
+        <div class="best-move-strip hidden" id="best-move-strip">
+          <div class="best-move-info">
+            <span class="best-move-tag">BEST</span>
+            <span id="best-move-text">Best: —</span>
+          </div>
+          <button id="btn-preview-best" class="btn btn-sm btn-secondary hidden" title="Temporarily preview best move on board">Preview Move</button>
         </div>
       </div>
 
@@ -313,6 +328,11 @@
           </div>
         </div>
 
+        <!-- Show Best Move + Primary CTA -->
+        <button id="btn-show-best" class="btn btn-best-toggle" title="Toggle Best Move Arrow & Strip (B)">
+          <span>★ Show Best Move (B)</span>
+        </button>
+
         <!-- Primary CTA Button -->
         <button id="analyse-btn" class="btn btn-primary">
           <span class="cta-glyph">★</span>
@@ -343,7 +363,8 @@
 
   </main>
 
-  <script src="/static/app.js?v=6"></script>
+  <script src="/static/pieces.js?v=9"></script>
+  <script src="/static/app.js?v=9"></script>
 </body>
 
 </html>
