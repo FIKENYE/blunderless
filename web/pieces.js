@@ -1,107 +1,147 @@
 /* ============================================================
    Blunderless — pieces.js
-   One original piece set, shared by both colours.
+   One original "editorial" piece set, shared by both colours.
+
+   Inspired by flat poster-style chess art:
+   - bold espresso contour lines
+   - right-half tonal shading (light from the left)
+   - terracotta accent bands on collars
+   - stepped base: foot + flat plate
+   ...kept at classic squat board proportions (not tall/elongated).
 
    Why one geometry for both sides?
-   - White and Black use the exact same shapes, only the palette
-     changes, so the two armies always look like one carved set.
-   - Each piece is rendered as its own data-URI <img>, so SVG ids
-     never clash (that was the bug with inlined Cardinal pieces).
+   White and Black use the exact same shapes, only the palette
+   changes, so both armies always read as one carved set.
 
-   Palette:
-     White: ivory body #FAF6F0, espresso outline/detail #22150E
-     Black: espresso body #22150E, warm cream detail lines #E6D8C8
+   Why data-URI <img> per piece (not inline SVG)?
+   Each image is isolated, so the clipPath id used for shading
+   can never clash between pieces on the page.
    ============================================================ */
 
 (function (global) {
   'use strict';
 
+  // rim    = thick outer "sticker" outline (chess.com style), drawn underneath
+  // body   = main fill
+  // shade  = right-half tone (gives the flat poster lighting)
+  // panel  = contrasting panel (knight mane)
+  // accent = terracotta collar bands
   const PALETTE = {
-    w: { body: '#FAF6F0', outline: '#22150E', detail: '#22150E' },
-    b: { body: '#22150E', outline: '#22150E', detail: '#E6D8C8' },
+    w: {
+      rim: '#D9C9B6', body: '#FAF6F0', shade: '#E8D8C2', panel: '#22150E',
+      outline: '#22150E', detail: '#22150E', accent: '#C86D3B', hi: '#FFFFFF',
+    },
+    b: {
+      rim: '#F3EADF', body: '#2E1F17', shade: '#4A3428', panel: '#E6D8C8',
+      outline: '#140C08', detail: '#E6D8C8', accent: '#C86D3B', hi: '#CDBBA8',
+    },
   };
 
-  // Shared plinth (base) used by every piece, so the set feels consistent.
-  const PLINTH = '<path d="M11 39.5h23V37c0-1.4-1.1-2.5-2.5-2.5h-18C12.1 34.5 11 35.6 11 37z"/>';
+  // Shared stepped base: a rounded foot sitting on a flat plate.
+  const BASE =
+    '<path d="M12.5 37.4h20c0-2-1.3-3.4-3-3.4h-14c-1.7 0-3 1.4-3 3.4z"/>' +
+    '<path d="M10.5 40.2h24v-2.8h-24z"/>';
 
-  // Each piece: `body` = filled shapes, `lines` = detail strokes drawn on top.
-  // viewBox is 0 0 45 45 for every piece.
+  // Each piece (viewBox 0 0 45 45):
+  //   body   - silhouette shapes (also used as the shading clip)
+  //   accent - terracotta bands, drawn on top of the body
+  //   panel  - optional contrasting shape (knight mane)
+  //   lines  - detail strokes
+  //   hi     - optional highlight strokes
   const SHAPES = {
-    // Pawn: round head, collar, flared body.
+    // Pawn: ball head, banded collar, flared skirt.
     P: {
-      body: PLINTH +
-        '<path d="M19 22.5c0 5-2 8.5-5 12h17c-3-3.5-5-7-5-12z"/>' +
-        '<path d="M17 19.5h11a1.5 1.5 0 0 1 0 3H17a1.5 1.5 0 0 1 0-3z"/>' +
-        '<circle cx="22.5" cy="13.5" r="5"/>',
-      lines: '<path d="M15 34.5h15"/>',
+      body: BASE +
+        '<path d="M19.3 21.4c-.2 5-1.7 9-4.3 12.6h15c-2.6-3.6-4.1-7.6-4.3-12.6z"/>' +
+        '<circle cx="22.5" cy="13.4" r="4.6"/>',
+      accent: '<path d="M17.5 18.6h10a1.4 1.4 0 0 1 0 2.8h-10a1.4 1.4 0 0 1 0-2.8z"/>',
+      lines: '',
+      hi: '<path d="M20.2 11.6a3 3 0 0 1 2.4-1.6"/>',
     },
 
-    // Rook: tapered tower with three crenellations.
+    // Rook: crenellated top, shoulder ledge, tapered tower, banded collar.
     R: {
-      body: PLINTH +
-        '<path d="M13 34.5h19l-1.5-3h-16z"/>' +
-        '<path d="M15 31.5h15l-1-14H16z"/>' +
-        '<path d="M13 17.5h19v-3H13z"/>' +
-        '<path d="M13 14.5V9h4v2.5h3V9h5v2.5h3V9h4v5.5z"/>',
-      lines: '<path d="M16 17.5h13M15.5 31.5h14M13.5 34.5h18"/>',
+      body: BASE +
+        '<path d="M15.5 17.4h14l-.8 13.6H16.3z"/>' +
+        '<path d="M13.5 15h18v2.4h-18z"/>' +
+        '<path d="M13.5 15V9h3.6v2.4h3.2V9h4.4v2.4h3.2V9h3.6v6z"/>',
+      accent: '<path d="M14 31h17v3H14z"/>',
+      lines: '',
     },
 
-    // Knight: clean geometric horse head facing left.
+    // Knight: flowing horse head facing right with a contrasting mane panel.
     N: {
-      body: PLINTH +
-        '<path d="M15 34.5c0-6 3.5-9 6.5-11.5-2.5.5-5 1.5-7 3.5-1.5 1.5-3.5 1-4-.5-.5-1.5 0-3 1-4.5L18 13l-1-4 3.5 2 1.5-3 2 3.5c6 1 10.5 5.5 10.5 13 0 4-1 7.5-2.5 10.5z"/>',
+      body: BASE +
+        '<path d="M14 34C12 26 13 16 20 10.5L22 7l2.5 3c4.5 1 8.5 5.5 10.5 10 .8 1.8 0 3.5-2 3.5-2.5.1-4.5-.5-6.5-1-1.5 3 .5 7 3.5 11.5z"/>',
+      panel: '<path d="M20 10.5C13 15.5 12.2 26 14 34h3.6c-2.2-7-1.6-15.6 2.4-21z"/>',
+      accent: '<path d="M14 31.4h16.5V34H14z"/>',
       lines:
-        '<path d="M25 12.5c3.8 1.6 6.5 5 7 9.5"/>' +
-        '<circle cx="17.6" cy="16.2" r="1" fill="currentColor" stroke="none"/>' +
-        '<circle cx="12.6" cy="23.6" r=".7" fill="currentColor" stroke="none"/>' +
-        '<path d="M13 34.5h19"/>',
+        '<circle cx="27.6" cy="14.6" r="1.05" fill="currentColor" stroke="none"/>' +
+        '<path d="M33.2 21.1l1 .5M26.5 22.5c1.6-.3 3-1.2 4-2.4"/>',
     },
 
-    // Bishop: mitre with diagonal slit and ball finial.
+    // Bishop: teardrop mitre with slit and ball finial.
     B: {
-      body: PLINTH +
-        '<path d="M15 34.5h15l-1.5-3h-12z"/>' +
-        '<path d="M16.5 31.5c-1-4 0-8 2-11.5 1.3-2.3 2.6-4.5 4-6.5 1.4 2 2.7 4.2 4 6.5 2 3.5 3 7.5 2 11.5z"/>' +
-        '<path d="M17.2 25h10.6v2.6H17.2z"/>' +
-        '<circle cx="22.5" cy="10.8" r="2.2"/>',
-      lines: '<path d="M25.6 16.8l-3.8 5M17 31.5h11M14 34.5h17"/>',
+      body: BASE +
+        '<path d="M19.5 26.2c-.3 3.4-1.8 5.6-4 7.8h14c-2.2-2.2-3.7-4.4-4-7.8z"/>' +
+        '<path d="M22.5 10.2c-3.2 2.6-5 5.6-5 8.6 0 2.4 1.2 4 2.6 4.8h4.8c1.4-.8 2.6-2.4 2.6-4.8 0-3-1.8-6-5-8.6z"/>' +
+        '<circle cx="22.5" cy="8.6" r="1.6"/>',
+      accent: '<path d="M17.5 23.6h10a1.3 1.3 0 0 1 0 2.6h-10a1.3 1.3 0 0 1 0-2.6z"/>',
+      lines: '<path d="M25 13.2l-3 4.2"/>',
     },
 
-    // Queen: five-point crown with ball tips.
+    // Queen: pointed crown with ball tips, banded neck, flared skirt.
     Q: {
-      body: PLINTH +
-        '<path d="M13.5 34.5h18l-1.5-3h-15z"/>' +
-        '<path d="M15 31.5 11 16l3.5 7 2-10 3 8 3-10 3 10 3-8 2 10 3.5-7-4 15.5z"/>' +
-        '<circle cx="11" cy="15" r="1.9"/>' +
-        '<circle cx="16.5" cy="12" r="1.9"/>' +
-        '<circle cx="22.5" cy="10" r="1.9"/>' +
-        '<circle cx="28.5" cy="12" r="1.9"/>' +
-        '<circle cx="34" cy="15" r="1.9"/>',
-      lines: '<path d="M15.6 27.5h13.8M15 31.5h15M13 34.5h19"/>',
+      body: BASE +
+        '<path d="M17.5 23.6c0 4.4-1.4 7.6-3.5 10.4h17c-2.1-2.8-3.5-6-3.5-10.4z"/>' +
+        '<path d="M15.5 21 14 12.5l4 3.5 4.5-5.5 4.5 5.5 4-3.5-1.5 8.5z"/>' +
+        '<circle cx="22.5" cy="8.9" r="1.6"/>' +
+        '<circle cx="14" cy="11.4" r="1.2"/>' +
+        '<circle cx="31" cy="11.4" r="1.2"/>',
+      accent: '<path d="M15 21h15a1.3 1.3 0 0 1 0 2.6H15a1.3 1.3 0 0 1 0-2.6z"/>',
+      lines: '<path d="M16.2 18.4h12.6"/>',
     },
 
-    // King: two rounded lobes under a cross.
+    // King: cross on a flared crown, banded neck, flared skirt.
     K: {
-      body: PLINTH +
-        '<path d="M13.5 34.5h18l-1.5-3h-15z"/>' +
-        '<path d="M20.5 16h4l.5 5h-5z"/>' +
-        '<path d="M15 31.5c-2.5-3.5-5-7-5-10.5 0-3 2.4-5 5.3-5 3 0 5.6 2 7.2 5 1.6-3 4.2-5 7.2-5 2.9 0 5.3 2 5.3 5 0 3.5-2.5 7-5 10.5z"/>' +
-        '<path d="M21 6h3v2.5h2.5v3H24V16h-3v-4.5h-2.5v-3H21z"/>',
-      lines: '<path d="M22.5 21v6M15 27.5h15M15 31.5h15M13 34.5h19"/>',
+      body: BASE +
+        '<path d="M17.8 22.1c0 4.8-1.5 8.6-3.8 11.9h17c-2.3-3.3-3.8-7.1-3.8-11.9z"/>' +
+        '<path d="M17 19.5 16 13.2c0-1.2 1-2.2 2.2-2.2h8.6c1.2 0 2.2 1 2.2 2.2L28 19.5z"/>' +
+        '<path d="M21.4 5h2.2v2h2v2.2h-2V11h-2.2V9.2h-2V7h2z"/>',
+      accent: '<path d="M15.5 19.5h14a1.3 1.3 0 0 1 0 2.6h-14a1.3 1.3 0 0 1 0-2.6z"/>',
+      lines: '<path d="M17.2 15.5h10.6"/>',
     },
   };
 
   /** Build the SVG markup for one piece code such as "wN" or "bQ". */
   function buildSvg(code) {
     const pal = PALETTE[code[0]];
-    const shape = SHAPES[code[1]];
-    if (!pal || !shape) return '';
+    const s = SHAPES[code[1]];
+    if (!pal || !s) return '';
+
+    const panel = s.panel || '';
+    const hi = s.hi || '';
 
     return (
       '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 45 45" shape-rendering="geometricPrecision">' +
-      `<g fill="${pal.body}" stroke="${pal.outline}" stroke-width="1.5" stroke-linejoin="round">${shape.body}</g>` +
-      // `color` lets the small dots (eye, nostril) reuse the detail colour.
-      `<g fill="none" stroke="${pal.detail}" color="${pal.detail}" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">${shape.lines}</g>` +
+      // Clip shape for the half-tone shading = the piece silhouette.
+      `<defs><clipPath id="sil">${s.body}</clipPath></defs>` +
+      // 1. Thick outer rim underneath everything.
+      `<g fill="${pal.rim}" stroke="${pal.rim}" stroke-width="4.5" stroke-linejoin="round">${s.body}${s.accent}</g>` +
+      // 2. Flat body fill.
+      `<g fill="${pal.body}">${s.body}</g>` +
+      // 3. Right-half shading, clipped to the silhouette.
+      `<rect x="22.5" y="0" width="23" height="45" fill="${pal.shade}" clip-path="url(#sil)"/>` +
+      // 4. Contrasting panel (knight mane).
+      `<g fill="${pal.panel}">${panel}</g>` +
+      // 5. Bold contour lines over the body.
+      `<g fill="none" stroke="${pal.outline}" stroke-width="1.4" stroke-linejoin="round">${s.body}${panel}</g>` +
+      // 6. Terracotta accent bands.
+      `<g fill="${pal.accent}" stroke="${pal.outline}" stroke-width="1.3" stroke-linejoin="round">${s.accent}</g>` +
+      // 7. Detail lines (`color` lets dots like the knight's eye reuse it).
+      `<g fill="none" stroke="${pal.detail}" color="${pal.detail}" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">${s.lines}</g>` +
+      // 8. Small highlights.
+      `<g fill="none" stroke="${pal.hi}" stroke-width="1.1" stroke-linecap="round">${hi}</g>` +
       '</svg>'
     );
   }
