@@ -187,9 +187,11 @@
       el.classList.toggle('hidden', v !== viewName);
     });
 
-    // Tapping the active tab again scrolls cleanly to top (native mobile app convention)
+    // Tapping the active tab again scrolls smoothly to top; switching tabs on mobile starts cleanly at top
     const activeViewEl = $(`view-${viewName}`);
-    if (wasSameView && activeViewEl && activeViewEl.scrollTop > 0) {
+    if (window.innerWidth <= 1023) {
+      window.scrollTo({ top: 0, behavior: wasSameView ? 'smooth' : 'auto' });
+    } else if (wasSameView && activeViewEl && activeViewEl.scrollTop > 0) {
       activeViewEl.scrollTo({ top: 0, behavior: 'smooth' });
     }
 

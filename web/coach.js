@@ -830,14 +830,17 @@
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
+      if (data.mood) applyStateTransition(data.mood);
       typeMessage(data.text || pickCommentaryForState(_currentState, ctx));
 
-      // Automatically play out the Best Move + Opponent's Best/Most Likely Reply on the board!
+      // Play out either the user's Brilliant/Great/Best follow-up ("played")
+      // or the missed engine Best Move ("best") on the board!
+      const demoMode = data.demo_mode || 'best';
       const lineUci = Array.isArray(data.best_line_uci) && data.best_line_uci.length > 0
         ? data.best_line_uci
-        : (ctx.bestMoveUci ? [ctx.bestMoveUci] : []);
+        : (demoMode === 'played' && ctx.playedMoveUci ? [ctx.playedMoveUci] : (ctx.bestMoveUci ? [ctx.bestMoveUci] : []));
       if (lineUci.length > 0 && global.BlunderlessCoach?.playExplainDemo) {
-        global.BlunderlessCoach.playExplainDemo(lineUci);
+        global.BlunderlessCoach.playExplainDemo(lineUci, demoMode);
       }
     } catch (_) {
       typeMessage(pickCommentaryForState(_currentState, ctx));

@@ -98,7 +98,24 @@ def _compare_played_vs_best(
 
     same_move = played_move is not None and best_move is not None and played_move == best_move
 
-    # ── 1. Immediate Tactics & Captures ──
+    # ── 1. Immediate Tactics & Captures (evaluate BOTH played_move and best_move independently) ──
+    if board_played and played_move:
+        if board_played.is_checkmate():
+            played_strengths.append("delivers checkmate on the spot")
+
+        played_fork = _detect_fork(board_played, played_move, mover)
+        if played_fork:
+            played_strengths.append(f"sets up a fork attacking {' and '.join(played_fork[:2])}")
+
+        if board_before.is_capture(played_move):
+            captured_p = board_before.piece_at(played_move.to_square)
+            cap_p_name = chess.piece_name(captured_p.piece_type) if captured_p else "pawn"
+            sq_p_name = chess.square_name(played_move.to_square)
+            played_strengths.append(f"captures the {cap_p_name} on {sq_p_name}")
+
+        if not board_played.is_checkmate() and board_played.is_check():
+            played_strengths.append("hits the enemy king with check, seizing the initiative")
+
     if board_best and best_move:
         if board_best.is_checkmate():
             why_best_better.append("delivers checkmate on the spot")
@@ -106,8 +123,6 @@ def _compare_played_vs_best(
         fork_targets = _detect_fork(board_best, best_move, mover)
         if fork_targets and not same_move:
             why_best_better.append(f"sets up a fork attacking {' and '.join(fork_targets[:2])}")
-        elif fork_targets and same_move:
-            played_strengths.append(f"forks {' and '.join(fork_targets[:2])}")
 
         if board_before.is_capture(best_move):
             captured = board_before.piece_at(best_move.to_square)
@@ -115,14 +130,35 @@ def _compare_played_vs_best(
             sq_name = chess.square_name(best_move.to_square)
             if not (played_move and board_before.is_capture(played_move)):
                 why_best_better.append(f"wins the {cap_name} on {sq_name}")
-            elif same_move:
-                played_strengths.append(f"captures the {cap_name} on {sq_name}")
 
         if not board_best.is_checkmate() and board_best.is_check() and not (board_played and board_played.is_check()):
             why_best_better.append("hits the enemy king with check, forcing them onto the back foot")
 
-    # ── 2. Hanging Pieces & Tactical Blunders ──
+    # ── 2. Hanging Pieces, Pins & Tactical Threats ──
     if feat_played:
+        # Positive tactical pressure created by played_move (pins, enemy hanging pieces, sacrifices)
+        pins_before = len(feat_before["tactical_threats"][o_key]["pinned_pieces"])
+        pins_played_list = feat_played["tactical_threats"][o_key]["pinned_pieces"]
+        if len(pins_played_list) > pins_before:
+            pin = pins_played_list[0]
+            played_strengths.append(f"pins their {pin['piece']} on {pin['square']} to the king")
+
+        opp_hang_before = len(feat_before["tactical_threats"][o_key]["hanging_pieces"])
+        opp_hang_played_list = feat_played["tactical_threats"][o_key]["hanging_pieces"]
+        if len(opp_hang_played_list) > opp_hang_before:
+            oh = opp_hang_played_list[0]
+            played_strengths.append(f"immediately targets their undefended {oh['piece']} on {oh['square']}")
+
+        # Detect intentional tactical sacrifice (piece placed en prise while maintaining strong eval)
+        if board_played and played_move:
+            moved_piece = board_played.piece_at(played_move.to_square)
+            if moved_piece and moved_piece.piece_type in (chess.KNIGHT, chess.BISHOP, chess.ROOK, chess.QUEEN):
+                if board_played.is_attacked_by(opp, played_move.to_square):
+                    sq_p = chess.square_name(played_move.to_square)
+                    played_strengths.append(
+                        f"boldly sacrifices the {chess.piece_name(moved_piece.piece_type)} on {sq_p} to open lines and create concrete threats"
+                    )
+
         hang_b = {h["square"] for h in feat_before["tactical_threats"][m_key]["hanging_pieces"]}
         hang_p = feat_played["tactical_threats"][m_key]["hanging_pieces"]
         hang_best_sqs = (
@@ -171,8 +207,14 @@ def _compare_played_vs_best(
     # ── 3. King Safety & Castling ──
     if best_move and board_before.is_castling(best_move) and not (played_move and board_before.is_castling(played_move)):
         why_best_better.append("castles your king out of the center and activates your rook")
-    elif played_move and board_before.is_castling(played_move) and same_move:
+    if played_move and board_before.is_castling(played_move):
         played_strengths.append("tucks your king to safety and connects the rooks")
+
+    if feat_played:
+        opp_atk_before = feat_before["king_safety"][o_key]["enemy_attackers_on_ring"]
+        opp_atk_p = feat_played["king_safety"][o_key]["enemy_attackers_on_ring"]
+        if opp_atk_p > opp_atk_before and opp_atk_p >= 2:
+            played_strengths.append("turns up the attack directly around the enemy king")
 
     if feat_played and feat_best:
         shield_before = feat_before["king_safety"][m_key]["pawn_shield_count"]
@@ -191,6 +233,16 @@ def _compare_played_vs_best(
             why_best_better.append("builds an attack directly against the enemy king")
 
     # ── 4. Pawn Structure & Long-Term Longevity ──
+    if feat_played:
+        ps_before = feat_before["pawn_structure"][m_key]
+        ps_p = feat_played["pawn_structure"][m_key]
+        if len(ps_p["passed_pawns"]) > len(ps_before["passed_pawns"]):
+            played_strengths.append("creates a dangerous passed pawn for the endgame")
+        opp_ps_before = feat_before["pawn_structure"][o_key]
+        opp_ps_p = feat_played["pawn_structure"][o_key]
+        if len(opp_ps_p["doubled_files"]) > len(opp_ps_before["doubled_files"]):
+            played_strengths.append("damages the opponent's pawn structure with doubled pawns")
+
     if feat_played and feat_best:
         ps_p = feat_played["pawn_structure"][m_key]
         ps_best = feat_best["pawn_structure"][m_key]
@@ -209,20 +261,24 @@ def _compare_played_vs_best(
             why_played_hurts.append("gives the opponent a dangerous passed pawn")
 
     # ── 5. Piece Activity, Development, Center Control & Opening Strategy ──
+    if feat_played:
+        undev_p = feat_played["piece_activity"][m_key]["undeveloped_minors"]
+        if undev_p < feat_before["piece_activity"][m_key]["undeveloped_minors"]:
+            played_strengths.append("brings a new piece into the fight")
+        cen_p = feat_played["piece_activity"]["center_control"][m_key]
+        if cen_p > feat_before["piece_activity"]["center_control"][m_key]:
+            played_strengths.append("tightens your grip on the center")
+
     if feat_played and feat_best:
         undev_p = feat_played["piece_activity"][m_key]["undeveloped_minors"]
         undev_best = feat_best["piece_activity"][m_key]["undeveloped_minors"]
         if undev_best < undev_p:
             why_best_better.append("develops a sleeping minor piece into the game instead of wasting a tempo")
-        elif same_move and undev_p < feat_before["piece_activity"][m_key]["undeveloped_minors"]:
-            played_strengths.append("brings a new piece into the fight")
 
         cen_p = feat_played["piece_activity"]["center_control"][m_key]
         cen_best = feat_best["piece_activity"]["center_control"][m_key]
         if cen_best > cen_p:
             why_best_better.append("claims stronger control of the center (d4/d5/e4/e5), giving your pieces more room")
-        elif same_move and cen_p > feat_before["piece_activity"]["center_control"][m_key]:
-            played_strengths.append("tightens your grip on the center")
 
         # Net material difference between best and played after 1 ply
         mat_p = feat_played["material_balance"]["advantage"] * sign
@@ -278,14 +334,30 @@ def _synthesize_chester_explanation(
         return f"Book move{op_note}! {actor} {played} keeps the eval at {ev}{extra}."
 
     if played == best or clf in ("brilliant", "great", "best", "excellent"):
-        reason = f" It {strengths[0]}." if strengths else (f" It {why_best[0]}." if why_best else "")
+        # Explain WHY the played move itself was strong (never pivot to a different engine move)
+        if strengths:
+            reason = f" It {' and '.join(strengths[:2])}."
+        elif played == best and why_best:
+            reason = f" It {why_best[0]}."
+        else:
+            reason = " It keeps your pieces coordinated and puts real pressure on the position."
+
+        played_line = facts.get("played_line") or []
+        follow_str = " ".join(played_line[:4])
+        follow_cite = f" Expected follow-up: {follow_str}." if follow_str else ""
+
         if not is_user_move:
-            return f"{subj} found {played} (eval {ev}).{reason} Sharp move—stay alert!"
+            tag = "a brilliant" if clf == "brilliant" else ("a great" if clf == "great" else "a strong")
+            return f"{subj} found {tag} move in {played} (eval {ev}).{reason}{follow_cite}"
+        if clf == "brilliant":
+            return f"Brilliant find with {played} (eval {ev})!{reason}{follow_cite}"
+        if clf == "great":
+            return f"Great move! {played} holds {ev}.{reason}{follow_cite}"
         if tone == "analytical":
-            return f"Strong precision: {played} maintains {ev}.{reason} Best practical plan."
+            return f"Strong precision: {played} maintains {ev}.{reason}{follow_cite}"
         if tone == "sarcastic":
-            return f"Alright, {played} holds {ev}.{reason} Even I can't roast that one."
-        return f"Nice find! {played} holds {ev}.{reason} Keep building on this plan."
+            return f"Alright, {played} holds {ev}.{reason}{follow_cite} Even I can't roast that one."
+        return f"Nice find! {played} holds {ev}.{reason}{follow_cite}"
 
     # Comparative explanation: WHY `best` was better than `played`!
     parts: list[str] = []
@@ -346,13 +418,23 @@ def _try_gemini_explain(facts: dict[str, Any], tone: str = "instructive") -> Opt
         "sarcastic": "cocky, playful, and GothamChess-style sarcastic—while still teaching clearly",
     }.get(tone, "encouraging and clear")
 
+    is_strong_played = facts.get("demo_mode") == "played"
+    task_instruction = (
+        "Explain in 2 short, clear sentences WHY the played move was Brilliant/Great/Best "
+        "(focus on played_strengths and the expected follow-up in played_line—do NOT tell the player to play a different engine move) "
+        "using ONLY the verified JSON facts below.\n"
+        if is_strong_played
+        else "Explain in 2 short, clear sentences WHY the best move is better than the played move "
+        "(covering tactics, pawn structure, king safety, piece activity, or opening strategy) "
+        "using ONLY the verified JSON facts below.\n"
+    )
+
     prompt = (
         f"You are Chester, a pixel-art knight chess coach. Your current tone is: {tone_desc}.\n"
-        "Explain in 2 short, clear sentences WHY the best move is better than the played move (covering tactics, "
-        "pawn structure, king safety, piece activity, or opening strategy) using ONLY the verified JSON facts below.\n"
+        f"{task_instruction}"
         "RULES:\n"
         "- Never invent any tactic, square, or eval not in the JSON.\n"
-        "- Always cite the eval or best move/line from the JSON.\n"
+        "- Always cite the eval and the played/best move or line from the JSON.\n"
         "- Keep language easy to grasp for a 600 Elo player.\n\n"
         f"VERIFIED FACTS:\n{json.dumps(facts)}"
     )
@@ -418,6 +500,7 @@ def explain_position(
     feat_best = None
     played_move_obj: Optional[chess.Move] = None
     best_move_obj: Optional[chess.Move] = None
+    board_after_played: Optional[chess.Board] = None
 
     if played_uci:
         try:
@@ -426,9 +509,9 @@ def explain_position(
                 played_move_obj = mv
                 if not played_san:
                     played_san = board_before.san(mv)
-                b_after = board_before.copy()
-                b_after.push(mv)
-                feat_played = extract_features(b_after.fen())
+                board_after_played = board_before.copy()
+                board_after_played.push(mv)
+                feat_played = extract_features(board_after_played.fen())
         except ValueError:
             pass
 
@@ -456,15 +539,50 @@ def explain_position(
         feat_best=feat_best,
     )
 
+    clf = (classification or "").lower()
+    is_strong_played = played_move_obj is not None and (
+        clf in ("brilliant", "great", "best", "excellent", "book")
+        or (best_move_obj is not None and played_move_obj == best_move_obj)
+    )
+
     best_line_uci = (top_lines[0].get("pv") or [])[:4] if top_lines else ([best_move] if best_move else [])
+    played_line_san: list[str] = []
+    demo_mode = "best"
+    demo_line_uci = best_line_uci
+
+    # For Brilliant / Great / Best / Excellent / Book moves, analyse AFTER the played move
+    # so we show WHY the user's move works (opponent's best reply + user's follow-up),
+    # rather than rewinding and replacing their move with a different engine move!
+    if is_strong_played and board_after_played is not None:
+        demo_mode = "played"
+        if not board_after_played.is_game_over():
+            try:
+                after_eng = analyse_position(board_after_played.fen(), depth=10, multipv=1, engine=engine)
+                after_lines = after_eng.get("top_lines") or []
+                reply_pv_uci = (after_lines[0].get("pv") or [])[:3] if after_lines else (
+                    [after_eng["best_move"]] if after_eng.get("best_move") else []
+                )
+                reply_pv_san = (after_lines[0].get("pv_san") or [])[:3] if after_lines else (
+                    [after_eng["best_move_san"]] if after_eng.get("best_move_san") else []
+                )
+                demo_line_uci = [played_move_obj.uci(), *reply_pv_uci]
+                played_line_san = [played_san or played_move_obj.uci(), *reply_pv_san]
+            except Exception:
+                demo_line_uci = [played_move_obj.uci()]
+                played_line_san = [played_san or played_move_obj.uci()]
+        else:
+            demo_line_uci = [played_move_obj.uci()]
+            played_line_san = [played_san or played_move_obj.uci()]
 
     facts: dict[str, Any] = {
         "played_move": played_san or played_uci,
         "best_move": best_move_san or best_move,
         "classification": classification or "info",
+        "demo_mode": demo_mode,
         "eval_after": _format_eval_str(eval_after),
         "eval_change_pawns": round((eval_change or 0) / 100.0, 2),
         "best_line": (top_lines[0].get("pv_san") or [])[:5] if top_lines else [],
+        "played_line": played_line_san,
         "tone": tone,
         "mover_name": mover_name,
         "is_user_move": is_user_move,
@@ -481,8 +599,9 @@ def explain_position(
             is_user_move=is_user_move,
         )
 
-    clf = (classification or "").lower()
-    if clf in ("brilliant", "great", "best", "excellent"):
+    if clf == "brilliant":
+        mood = "brilliant_shock"
+    elif clf in ("great", "best", "excellent"):
         mood = "smug"
     elif clf == "book":
         mood = "deadpan"
@@ -497,6 +616,7 @@ def explain_position(
         "text": text,
         "mood": mood,
         "source": source,
-        "best_line_uci": best_line_uci,
+        "demo_mode": demo_mode,
+        "best_line_uci": demo_line_uci,
         "facts": facts,
     }

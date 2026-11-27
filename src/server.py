@@ -550,13 +550,16 @@ def health_endpoint(request: Request) -> dict[str, Any]:
 
 @app.get("/")
 def index():
-    """Serve the frontend HTML page."""
+    """Serve the frontend HTML page with no-cache so mobile Safari never serves stale asset versions."""
     index_file = WEB_DIR / "index.html"
     if not index_file.exists():
         return JSONResponse(
             {"message": "Blunderless API is running. Frontend UI not built yet."}
         )
-    return FileResponse(str(index_file))
+    return FileResponse(
+        str(index_file),
+        headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
+    )
 
 
 @app.post("/api/analyse-fen")

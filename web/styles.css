@@ -97,6 +97,22 @@ body {
   line-height: 1.4;
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+button,
+a,
+input,
+select,
+textarea,
+.nav-btn,
+.tab-btn,
+.mobile-nav-btn,
+.rail-btn,
+.move-cell,
+.pill-btn,
+.review-cnt-btn {
+  touch-action: manipulation;
 }
 
 body {
@@ -4723,8 +4739,27 @@ body.landing-mode .topbar {
     --eval-gap: 6px;
   }
 
-  /* Compact App Topbar: Logo + Account Pill (Nav moves to Bottom Tab Bar) */
+  /* Use native document scrolling on mobile/iPad Safari (prevents Safari scroll lock & fixed-bar drift) */
+  html,
+  body {
+    height: auto;
+    min-height: 100%;
+    overflow-x: clip;
+    overflow-y: auto;
+    max-width: 100%;
+  }
+
+  body {
+    min-height: 100dvh;
+  }
+
+  /* Compact App Topbar: Sticky Logo + Account Pill (Nav moves to Bottom Tab Bar) */
   .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 35;
+    width: 100%;
+    max-width: 100%;
     height: calc(var(--topbar-h) + env(safe-area-inset-top, 0px));
     padding: env(safe-area-inset-top, 0px) 12px 0;
     gap: 8px;
@@ -4738,6 +4773,7 @@ body.landing-mode .topbar {
   .brand-frame {
     padding: 3px 8px;
     gap: 7px;
+    min-width: 0;
   }
 
   .logo {
@@ -4748,11 +4784,14 @@ body.landing-mode .topbar {
   /* Chess.com-Style Fixed Bottom Tab Bar */
   .mobile-bottom-nav {
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     position: fixed;
     left: 0;
     right: 0;
     bottom: 0;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
     height: calc(var(--mobile-nav-h) + env(safe-area-inset-bottom, 0px));
     padding-bottom: env(safe-area-inset-bottom, 0px);
     background: var(--surface);
@@ -4772,6 +4811,8 @@ body.landing-mode .topbar {
     align-items: center;
     justify-content: center;
     gap: 3px;
+    min-width: 0;
+    overflow: hidden;
     border: none;
     background: transparent;
     color: var(--roast);
@@ -4790,8 +4831,12 @@ body.landing-mode .topbar {
   .mobile-nav-btn .mnav-label {
     font-size: 9px;
     font-weight: 700;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.04em;
     line-height: 1;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .mobile-nav-btn.active {
@@ -4818,11 +4863,23 @@ body.landing-mode .topbar {
     color: var(--espresso);
   }
 
-  /* Scrollable Page Views clear the bottom nav bar */
+  /* Prevent iPhone & iPad Safari auto-zoom on any focused input/select */
+  .text-input,
+  .lp-input,
+  .filter-select,
+  .quick-textarea,
+  .pgn-textarea {
+    font-size: 16px;
+  }
+
+  /* Page Views flow naturally with document scroll and clear the fixed bottom nav */
   .view-scroll {
-    min-height: 0;
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    flex: none;
+    overflow: visible;
     padding: 16px 18px calc(var(--mobile-nav-h) + env(safe-area-inset-bottom, 0px) + 28px);
-    -webkit-overflow-scrolling: touch;
   }
 
   #view-home.view-scroll {
@@ -4830,27 +4887,37 @@ body.landing-mode .topbar {
   }
 
   .home-dashboard-wrap {
+    width: 100%;
+    max-width: 100%;
     padding: 16px 18px calc(var(--mobile-nav-h) + env(safe-area-inset-bottom, 0px) + 28px);
   }
 
-  /* ── Analyze Workspace: Single-Column Chess.com Stack ── */
+  .page-shell,
+  .editorial-card {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  /* ── Analyze Workspace: Single-Column Chess.com Stack (Native Document Scroll) ── */
   .workspace {
     display: flex;
     flex-direction: column;
+    width: 100%;
+    max-width: 100%;
     height: auto;
-    min-height: 0;
-    flex: 1;
-    overflow-y: auto;
-    overflow-x: hidden;
-    -webkit-overflow-scrolling: touch;
-    padding-bottom: calc(var(--mobile-nav-h) + var(--mobile-dock-h) + env(safe-area-inset-bottom, 0px) + 14px);
+    flex: none;
+    overflow: visible;
+    padding-bottom: calc(var(--mobile-nav-h) + var(--mobile-dock-h) + env(safe-area-inset-bottom, 0px) + 16px);
   }
 
   .left-stage {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
     flex-direction: column;
     align-items: center;
     justify-content: flex-start;
-    padding: 10px 14px 12px;
+    padding: 10px 12px 12px;
     gap: 10px;
     overflow: visible;
     flex-shrink: 0;
@@ -4861,6 +4928,7 @@ body.landing-mode .topbar {
     order: -1;
     width: 100%;
     max-width: 604px;
+    min-width: 0;
     flex-direction: row-reverse;
     align-items: center;
     justify-content: center;
@@ -4896,30 +4964,31 @@ body.landing-mode .topbar {
     display: none;
   }
 
-  /* Board Assembly: Eval Bar flush left of 8x8 board, Utility Rail horizontal underneath */
+  /* Board Assembly: Eval Bar flush left of 8x8 board, Utility Rail horizontal underneath (Safari-safe, no display:contents) */
   .board-container {
     width: 100%;
+    max-width: 100%;
     justify-content: center;
     align-items: flex-start;
     gap: var(--eval-gap);
   }
 
   .board-column {
+    min-width: 0;
+    max-width: 100%;
     gap: 6px;
     align-items: center;
   }
 
-  /* Unwrap .board-row so board-wrap and utility rail can be ordered cleanly in .board-column */
   .board-row {
-    display: contents;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    max-width: 100%;
   }
 
-  #top-player-bar { order: 1; }
-  #board-wrap     { order: 2; }
-  #bot-player-bar { order: 3; }
-
   .board-utility-rail {
-    order: 4;
     width: 100%;
     flex-direction: row;
     justify-content: space-between;
@@ -4929,11 +4998,12 @@ body.landing-mode .topbar {
 
   .rail-btn {
     flex: 1;
+    min-width: 0;
     width: auto;
     height: 36px;
     flex-direction: row;
     gap: 5px;
-    padding: 4px 6px;
+    padding: 4px 4px;
   }
 
   .rail-icon {
@@ -4953,30 +5023,49 @@ body.landing-mode .topbar {
     overflow: visible;
     flex-shrink: 0;
     width: 100%;
+    max-width: 100%;
+    min-width: 0;
   }
 
+  /* All 5 tabs fit visibly side-by-side — zero hidden tabs or sideways swipe needed */
   .sidebar-tabs {
     position: sticky;
-    top: 0;
-    z-index: 12;
-    overflow-x: auto;
-    scrollbar-width: none;
-  }
-
-  .sidebar-tabs::-webkit-scrollbar {
-    display: none;
+    top: calc(var(--topbar-h) + env(safe-area-inset-top, 0px));
+    z-index: 15;
+    display: flex;
+    width: 100%;
+    max-width: 100%;
+    overflow: hidden;
   }
 
   .tab-btn {
+    flex: 1 1 0;
+    min-width: 0;
     min-height: 42px;
-    padding: 10px 8px;
-    font-size: 12px;
+    padding: 10px 2px;
+    font-size: 11px;
+    text-align: center;
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .engine-section,
+  .engine-strip,
+  .engine-lines-panel,
+  .engine-line,
+  .opening-strip,
+  .best-move-strip,
+  .subgame-strip {
+    min-width: 0;
+    max-width: 100%;
   }
 
   .tab-content {
     overflow: visible;
     flex: none;
+    min-width: 0;
+    max-width: 100%;
   }
 
   .move-list-scroll,
@@ -4987,6 +5076,8 @@ body.landing-mode .topbar {
   .candidates-section {
     overflow: visible;
     max-height: none;
+    min-width: 0;
+    max-width: 100%;
   }
 
   .move-cell {
@@ -4998,25 +5089,35 @@ body.landing-mode .topbar {
     padding: 10px 8px;
   }
 
-  /* Sticky Chess.com Playback & Action Dock pinned right above the Bottom Tab Bar */
+  .game-rating-card {
+    grid-template-columns: minmax(0, 1fr) auto 12px auto;
+  }
+
+  /* Sticky Chess.com Playback & Action Dock pinned right above Bottom Tab Bar (zero horizontal overflow) */
   .sidebar-footer {
     position: fixed;
     left: 0;
     right: 0;
     bottom: calc(var(--mobile-nav-h) + env(safe-area-inset-bottom, 0px));
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
     z-index: 25;
-    padding: 6px 10px;
+    padding: 6px 8px;
     gap: 6px;
     display: grid;
-    grid-template-columns: 1fr 1.35fr;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr);
     border-top: 2px solid var(--espresso);
     background: var(--surface);
   }
 
   .sidebar-footer #btn-show-best {
     grid-column: 1;
-    padding: 6px 8px;
-    font-size: 11px;
+    min-width: 0;
+    width: 100%;
+    padding: 6px 6px;
+    font-size: 10.5px;
+    letter-spacing: 0.02em;
     min-height: 34px;
     white-space: nowrap;
     overflow: hidden;
@@ -5025,18 +5126,25 @@ body.landing-mode .topbar {
 
   .sidebar-footer #analyse-btn {
     grid-column: 2;
-    padding: 6px 10px;
-    font-size: 11px;
+    min-width: 0;
+    width: 100%;
+    padding: 6px 8px;
+    font-size: 10.5px;
+    letter-spacing: 0.03em;
     min-height: 34px;
+    overflow: hidden;
+    text-overflow: ellipsis;
     box-shadow: 2px 2px 0 var(--espresso);
   }
 
   .sidebar-footer .nav-controls {
     grid-column: 1 / -1;
     gap: 6px;
+    min-width: 0;
   }
 
   .sidebar-footer .nav-btn {
+    min-width: 0;
     min-height: 40px;
     padding: 6px 0;
     font-size: 15px;
@@ -5222,11 +5330,15 @@ body.landing-mode .topbar {
 
   .section-actions {
     width: 100%;
+    flex-direction: column;
+    gap: 6px;
   }
 
   .section-actions .btn {
-    flex: 1;
-    min-height: 36px;
+    width: 100%;
+    min-height: 38px;
+    white-space: normal;
+    text-align: center;
   }
 
   .editorial-card {
@@ -5256,7 +5368,9 @@ body.landing-mode .topbar {
   }
 
   .pill-group {
+    display: flex;
     flex-wrap: wrap;
+    width: 100%;
     max-width: 100%;
   }
 

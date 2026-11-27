@@ -659,15 +659,17 @@ function initBoard() {
     let rawSize;
 
     if (isStackedLayout) {
-      // Utility rail moves horizontally beneath the board, so only eval bar + gap take width
+      // Utility rail moves horizontally beneath the board, so only eval bar + gap take width.
+      // Clamp strictly to viewport width so the board can NEVER overflow an iPhone/iPad screen.
       const isPhone = vw <= 767;
+      const safeVw = Math.min(stage.clientWidth || vw, document.documentElement.clientWidth || vw, vw);
       const evalReserveW = (evalShell?.offsetWidth || (isPhone ? 20 : 22)) + (isPhone ? 5 : 6);
-      const sidePad = isPhone ? 14 : 32;
-      const maxWidthCap = isPhone ? 540 : 580;
-      const availW = Math.min(stage.clientWidth - evalReserveW - sidePad, maxWidthCap);
+      const sidePad = isPhone ? 18 : 34;
+      const maxWidthCap = isPhone ? 520 : 580;
+      const availW = Math.min(safeVw - evalReserveW - sidePad, maxWidthCap);
 
-      // Also cap against viewport height so landscape phones & short screens stay comfortable
-      const verticalChrome = isPhone ? 245 : 310;
+      // Cap against viewport height so landscape phones & short screens stay comfortable
+      const verticalChrome = isPhone ? 250 : 310;
       const availH = Math.max(240, vh - verticalChrome);
       rawSize = Math.max(224, Math.min(availW, availH));
     } else {
@@ -1046,17 +1048,19 @@ function cancelExplainDemo() {
   state.explainDemo.active = false;
 }
 
-function playExplainDemo(bestLineUci) {
+function playExplainDemo(bestLineUci, demoMode = 'best') {
   if (!Array.isArray(bestLineUci) || bestLineUci.length === 0) return;
   if (state.subgame.active) return;
 
   const firstUci = bestLineUci[0];
   if (!firstUci || firstUci.length < 4) return;
 
-  // If the user already played this exact best move, show the follow-up from current ply
+  // For Brilliant / Great / Best / Excellent moves (demoMode === 'played') OR when
+  // the user already played the engine's best move, keep their move on the board and
+  // animate the expected follow-up (opponent's best reply + user's continuation)!
   const curMove = state.plyIndex > 0 ? state.moves[state.plyIndex - 1] : null;
-  const alreadyPlayedBest = curMove && curMove.uci === firstUci;
-  const branchPly = (state.plyIndex === 0 || alreadyPlayedBest) ? state.plyIndex : state.plyIndex - 1;
+  const keepPlayedMove = demoMode === 'played' || (curMove && curMove.uci === firstUci);
+  const branchPly = (state.plyIndex === 0 || keepPlayedMove) ? state.plyIndex : state.plyIndex - 1;
 
   cancelExplainDemo();
   clearMoveSelection();
@@ -1068,7 +1072,7 @@ function playExplainDemo(bestLineUci) {
 
   const demoGame = buildGameAtPly(branchPly);
 
-  if (!alreadyPlayedBest) {
+  if (!keepPlayedMove) {
     // Beat 1 (0ms): Rewind to position before the mistake and highlight best move arrow
     state.board.position(demoGame.fen(), true);
     highlightLastMove(null, null, null);
@@ -1110,8 +1114,9 @@ function playExplainDemo(bestLineUci) {
     }, 550);
     state.explainDemo.timers.push(t1);
   } else if (bestLineUci[1] && bestLineUci[1].length >= 4) {
-    // Already played best move -> show opponent's most likely reply after 450ms
+    // Keep user's Brilliant/Great/Best move on the board and show opponent's best reply + user's follow-up
     const replyUci = bestLineUci[1];
+    const followUci = bestLineUci[2];
     const t1 = setTimeout(() => {
       if (!state.explainDemo.active) return;
       const m2 = demoGame.move({
@@ -1123,6 +1128,22 @@ function playExplainDemo(bestLineUci) {
       state.board.position(demoGame.fen(), true);
       highlightLastMove(m2.from, m2.to, null);
       playMoveSound({ san: m2.san }, demoGame);
+
+      if (followUci && followUci.length >= 4) {
+        const t2 = setTimeout(() => {
+          if (!state.explainDemo.active) return;
+          const m3 = demoGame.move({
+            from: followUci.slice(0, 2),
+            to: followUci.slice(2, 4),
+            promotion: followUci.slice(4, 5) || 'q',
+          });
+          if (!m3) return;
+          state.board.position(demoGame.fen(), true);
+          highlightLastMove(m3.from, m3.to, curMove?.classification || 'best');
+          playMoveSound({ san: m3.san }, demoGame);
+        }, 800);
+        state.explainDemo.timers.push(t2);
+      }
     }, 450);
     state.explainDemo.timers.push(t1);
   }
@@ -1748,11 +1769,23 @@ function cancelPendingAnalysisLoad() {
 }
 
 async function runAnalysis(customText = null, opts = {}) {
-  const raw = (customText !== null && customText !== undefined ? String(customText) : pgnInput.value).trim();
+  const fallbackVal = (pgnInput.value || '').trim() || (quickInput?.value || '').trim();
+  const raw = (customText !== null && customText !== undefined ? String(customText) : fallbackVal).trim();
   if (!raw) {
-    switchTab('info');
-    return setStatus('Paste a PGN or FEN first.', 'error');
+    // On mobile/tablet, jump to Moves tab (Quick Import + Sample Game) and scroll it into view
+    // so tapping "Game Review / Analyse" on an empty board clearly shows how to load a game.
+    if (window.innerWidth <= 1023) {
+      switchTab('moves');
+      const importEl = $('quick-import-panel') || document.querySelector('.right-sidebar');
+      if (importEl) importEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      const typedEl = $('knight-typed');
+      if (typedEl) typedEl.textContent = 'Paste a PGN or tap SAMPLE GAME below to run Game Review!';
+    } else {
+      switchTab('info');
+    }
+    return setStatus('Paste a PGN or FEN first (or tap SAMPLE GAME).', 'error');
   }
+  if (!pgnInput.value.trim()) pgnInput.value = raw;
 
   const label = opts.label || 'Analysing with Stockfish...';
   const { seq, signal } = beginNewAnalysisLoad(label);
