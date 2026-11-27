@@ -149,8 +149,9 @@ def get_lichess_games(
     if not cleaned:
         raise ValueError("Lichess username cannot be empty.")
 
+    max_fetch = 1000 if limit <= 0 else max(1, min(1000, limit))
     params: dict[str, Any] = {
-        "max": max(1, min(200, limit)),
+        "max": max_fetch,
         "pgnInJson": "true",
         "clocks": "true",
         "opening": "true",

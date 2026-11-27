@@ -180,10 +180,11 @@ def get_recent_games(
     limit: int = 5,
     days: Optional[int] = None,
     time_class: Optional[str] = None,
-    max_archives: int = 6,
+    max_archives: Optional[int] = 6,
 ) -> list[dict[str, Any]]:
     """
     Return up to `limit` most recent games (with PGNs) for a Chess.com username.
+    Pass `limit <= 0` for all games and `max_archives=None` to scan every monthly archive.
     Walks backwards through monthly archives, optionally filtering by `days` window
     and `time_class` ('bullet', 'blitz', 'rapid', 'daily').
     """
@@ -197,13 +198,14 @@ def get_recent_games(
         raise ValueError(f"Chess.com user '{username}' not found.") from exc
 
     archives = archives_data.get("archives", [])
+    selected_archives = archives[-max_archives:] if (max_archives and max_archives > 0) else archives
     collected: list[dict[str, Any]] = []
     cutoff_ts = int(time.time()) - days * 86400 if (days and days > 0) else 0
     tc_filter = (time_class or "").lower()
     if tc_filter == "all":
         tc_filter = ""
 
-    for archive_url in reversed(archives[-max_archives:]):
+    for archive_url in reversed(selected_archives):
         month_data = _fetch_json(archive_url)
         raw_games = month_data.get("games", [])
         raw_games.sort(key=lambda g: g.get("end_time", 0), reverse=True)
@@ -219,7 +221,7 @@ def get_recent_games(
             if tc_filter and (game.get("time_class") or "").lower() != tc_filter:
                 continue
             collected.append(_format_game(game))
-            if len(collected) >= limit:
+            if limit > 0 and len(collected) >= limit:
                 return collected
 
         if hit_cutoff:

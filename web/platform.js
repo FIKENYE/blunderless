@@ -24,8 +24,62 @@
     insPlatform: 'all',
     activeJobId: null,
     jobPollTimer: null,
+    startAbortCtrl: null,
+    cancelRequested: false,
     activeReportId: null,
   };
+
+  // ── Theme & Settings Helpers ────────────────────────────────────────
+  function getTheme() {
+    return document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+  }
+
+  function applyTheme(theme) {
+    const isDark = theme === 'dark';
+    if (isDark) {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    } else {
+      document.documentElement.removeAttribute('data-theme');
+    }
+    try { localStorage.setItem('blunderless_theme', isDark ? 'dark' : 'light'); } catch (_) {}
+
+    const btn = $('setting-darkmode-toggle');
+    if (btn) {
+      btn.classList.toggle('active', isDark);
+      btn.setAttribute('aria-checked', isDark ? 'true' : 'false');
+    }
+    if ($('setting-darkmode-label')) {
+      $('setting-darkmode-label').textContent = isDark ? 'DARK' : 'LIGHT';
+    }
+    if ($('setting-theme-desc')) {
+      $('setting-theme-desc').textContent = isDark
+        ? 'Dark Roast espresso palette active. Switch back anytime.'
+        : 'Warm parchment palette active. Toggle on for Dark Roast low-light mode.';
+    }
+    // Re-render visible SVG charts so axis text & strokes match the active theme
+    if (pState.dashboard && pState.view === 'home') renderHomeEloChart();
+  }
+
+  function syncSettingsToggles() {
+    const soundBtn = $('btn-rail-sound');
+    const coordsBtn = $('btn-rail-coords');
+    const soundOn = soundBtn ? soundBtn.classList.contains('active') : true;
+    const coordsOn = coordsBtn ? coordsBtn.classList.contains('active') : true;
+
+    const sToggle = $('setting-sound-toggle');
+    if (sToggle) {
+      sToggle.classList.toggle('active', soundOn);
+      sToggle.setAttribute('aria-checked', soundOn ? 'true' : 'false');
+    }
+    if ($('setting-sound-label')) $('setting-sound-label').textContent = soundOn ? 'ON' : 'OFF';
+
+    const cToggle = $('setting-coords-toggle');
+    if (cToggle) {
+      cToggle.classList.toggle('active', coordsOn);
+      cToggle.setAttribute('aria-checked', coordsOn ? 'true' : 'false');
+    }
+    if ($('setting-coords-label')) $('setting-coords-label').textContent = coordsOn ? 'ON' : 'OFF';
+  }
 
   // ── 1. Brand Art & Landing Interactive Data ─────────────────────────
   function initBrandArt() {
@@ -71,9 +125,10 @@
   ];
 
   // ── 2. API Helper ───────────────────────────────────────────────────
-  async function api(path, method = 'GET', body = null) {
+  async function api(path, method = 'GET', body = null, signal = null) {
     const opts = { method, headers: { 'Content-Type': 'application/json' } };
     if (body !== null) opts.body = JSON.stringify(body);
+    if (signal) opts.signal = signal;
     const res = await fetch(path, opts);
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: res.statusText }));
@@ -113,7 +168,7 @@
   }
 
   function switchAppView(viewName) {
-    const valid = ['home', 'analyze', 'games', 'insights'];
+    const valid = ['home', 'analyze', 'games', 'insights', 'settings'];
     if (!valid.includes(viewName)) viewName = 'home';
     pState.view = viewName;
     try { sessionStorage.setItem('blunderless_view', viewName); } catch (_) {}
@@ -139,24 +194,44 @@
       loadGamesLibrary();
     } else if (viewName === 'insights') {
       loadSavedReportsList();
+    } else if (viewName === 'settings') {
+      applyTheme(getTheme());
+      syncSettingsToggles();
     }
   }
 
   // ── 4. Open Any Saved/Library Game Directly on the Board ────────────
+  let _openGameAbortCtrl = null;
+
   async function openLibraryGame(gameId, targetPly = 0) {
+    if (_openGameAbortCtrl) {
+      try { _openGameAbortCtrl.abort(); } catch (_) {}
+    }
+    const ctrl = new AbortController();
+    _openGameAbortCtrl = ctrl;
+
+    switchAppView('analyze');
+    const loadSeq = global.BlunderlessBoard?.beginExternalLoad?.('Loading game...') ?? null;
+
     try {
-      const g = await api(`/api/games/${gameId}`);
+      const g = await api(`/api/games/${gameId}`, 'GET', null, ctrl.signal);
       const myHandle = g.user_color === 'white' ? g.white_user : g.black_user;
-      switchAppView('analyze');
+      const oppName = g.user_color === 'white' ? g.black_user : g.white_user;
+
       if (g.analysed && g.analysis) {
-        await global.BlunderlessBoard?.openGame(g.pgn, g.analysis, targetPly, myHandle);
+        await global.BlunderlessBoard?.openGame(g.pgn, g.analysis, targetPly, myHandle, loadSeq);
       } else {
-        // Trigger server-side analyse & cache in SQLite so next open is instant
-        const res = await api(`/api/games/${gameId}/analyse?depth=10`, 'POST');
-        await global.BlunderlessBoard?.openGame(g.pgn, res.analysis, targetPly, myHandle);
+        // Show clear progress while Stockfish analyses & caches this library game
+        const seq2 = global.BlunderlessBoard?.beginExternalLoad?.(`Analysing vs ${oppName}...`) ?? loadSeq;
+        const res = await api(`/api/games/${gameId}/analyse?depth=10`, 'POST', null, ctrl.signal);
+        await global.BlunderlessBoard?.openGame(g.pgn, res.analysis, targetPly, myHandle, seq2);
       }
     } catch (err) {
+      if (err?.name === 'AbortError') return;
+      global.BlunderlessBoard?.endExternalLoad?.(loadSeq);
       alert(`Could not open game: ${err.message}`);
+    } finally {
+      if (_openGameAbortCtrl === ctrl) _openGameAbortCtrl = null;
     }
   }
 
@@ -322,12 +397,18 @@
     });
 
     // Horizontal grid lines (4 ticks)
+    const isDark = getTheme() === 'dark';
+    const gridStroke = isDark ? 'rgba(241,230,216,0.16)' : 'rgba(43,26,18,0.14)';
+    const labelColor = isDark ? '#BBA38F' : '#8C5A3C';
+    const maStroke = isDark ? '#F1E6D8' : '#2B1A12';
+    const dotOutline = isDark ? '#17110D' : '#FAF6F0';
+
     let gridSvg = '';
     for (let t = 0; t <= 3; t++) {
       const gy = padT + (t / 3) * plotH;
       const gVal = Math.round(maxY - (t / 3) * spanY);
-      gridSvg += `<line x1="${padL}" y1="${gy.toFixed(1)}" x2="${W - padR}" y2="${gy.toFixed(1)}" stroke="rgba(43,26,18,0.14)" stroke-dasharray="3,3" />`;
-      gridSvg += `<text x="${padL - 6}" y="${(gy + 3.5).toFixed(1)}" text-anchor="end" font-size="10" fill="#8C5A3C">${gVal}${opts.suffix || ''}</text>`;
+      gridSvg += `<line x1="${padL}" y1="${gy.toFixed(1)}" x2="${W - padR}" y2="${gy.toFixed(1)}" stroke="${gridStroke}" stroke-dasharray="3,3" />`;
+      gridSvg += `<text x="${padL - 6}" y="${(gy + 3.5).toFixed(1)}" text-anchor="end" font-size="10" fill="${labelColor}">${gVal}${opts.suffix || ''}</text>`;
     }
 
     // X-axis labels (start, mid, end)
@@ -337,7 +418,7 @@
     for (const idx of xIndices) {
       if (seenX.has(idx) || !coords[idx]) continue;
       seenX.add(idx);
-      xLabelsSvg += `<text x="${coords[idx].x.toFixed(1)}" y="${H - 6}" text-anchor="middle" font-size="10" fill="#8C5A3C">${escHtml(coords[idx].label)}</text>`;
+      xLabelsSvg += `<text x="${coords[idx].x.toFixed(1)}" y="${H - 6}" text-anchor="middle" font-size="10" fill="${labelColor}">${escHtml(coords[idx].label)}</text>`;
     }
 
     const strokeCol = opts.color || '#C86D3B';
@@ -356,7 +437,7 @@
         })
         .join(' ');
       if (maPts) {
-        maSvg = `<polyline points="${maPts}" fill="none" stroke="#2B1A12" stroke-width="1.5" stroke-dasharray="4,3" opacity="0.7" />`;
+        maSvg = `<polyline points="${maPts}" fill="none" stroke="${maStroke}" stroke-width="1.5" stroke-dasharray="4,3" opacity="0.7" />`;
       }
     }
 
@@ -365,10 +446,10 @@
     let dotsSvg = '';
     for (let i = 0; i < coords.length; i += step) {
       const c = coords[i];
-      dotsSvg += `<circle cx="${c.x.toFixed(1)}" cy="${c.y.toFixed(1)}" r="3.2" fill="${strokeCol}" stroke="#FAF6F0" stroke-width="1.2"><title>${escHtml(c.label)}: ${c.yVal}${opts.suffix || ''}</title></circle>`;
+      dotsSvg += `<circle cx="${c.x.toFixed(1)}" cy="${c.y.toFixed(1)}" r="3.2" fill="${strokeCol}" stroke="${dotOutline}" stroke-width="1.2"><title>${escHtml(c.label)}: ${c.yVal}${opts.suffix || ''}</title></circle>`;
     }
     const last = coords[coords.length - 1];
-    dotsSvg += `<circle cx="${last.x.toFixed(1)}" cy="${last.y.toFixed(1)}" r="4.8" fill="${strokeCol}" stroke="#22150E" stroke-width="1.5"><title>${escHtml(last.label)}: ${last.yVal}${opts.suffix || ''}</title></circle>`;
+    dotsSvg += `<circle cx="${last.x.toFixed(1)}" cy="${last.y.toFixed(1)}" r="4.8" fill="${strokeCol}" stroke="${maStroke}" stroke-width="1.5"><title>${escHtml(last.label)}: ${last.yVal}${opts.suffix || ''}</title></circle>`;
 
     return `
       <svg class="retro-svg-chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
@@ -408,12 +489,16 @@
       )
       .join('');
 
+    const isDark = getTheme() === 'dark';
+    const trackStroke = isDark ? 'rgba(241,230,216,0.16)' : 'rgba(43,26,18,0.12)';
+    const textFill = isDark ? '#F1E6D8' : '#2B1A12';
+
     return `
       <div class="donut-inner">
         <svg viewBox="0 0 124 124" width="124" height="124" class="donut-svg">
-          <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="rgba(43,26,18,0.12)" stroke-width="18" />
+          <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${trackStroke}" stroke-width="18" />
           ${slices}
-          <text x="${cx}" y="${cy + 4}" text-anchor="middle" font-size="13" font-weight="700" fill="#2B1A12">${escHtml(centerLabel || String(total))}</text>
+          <text x="${cx}" y="${cy + 4}" text-anchor="middle" font-size="13" font-weight="700" fill="${textFill}">${escHtml(centerLabel || String(total))}</text>
         </svg>
         <div class="donut-legend">${legend}</div>
       </div>`;
@@ -734,11 +819,24 @@
     const tc = overrides.time_class || pState.insTc;
     const period = overrides.period_days !== undefined ? overrides.period_days : pState.insPeriod;
     const plat = overrides.platform || pState.insPlatform;
-    const maxGames = overrides.max_games || parseInt($('ins-max-games')?.value || '40', 10);
+    const parsedMax = parseInt($('ins-max-games')?.value ?? '40', 10);
+    // Preserve `0` ("All games") instead of falling back to 40
+    const maxGames = overrides.max_games !== undefined
+      ? overrides.max_games
+      : (Number.isNaN(parsedMax) ? 40 : parsedMax);
+
+    pState.cancelRequested = false;
+    clearTimeout(pState.jobPollTimer);
+    if (pState.startAbortCtrl) {
+      try { pState.startAbortCtrl.abort(); } catch (_) {}
+    }
+    pState.startAbortCtrl = new AbortController();
 
     const progBox = $('ins-progress-box');
     progBox.classList.remove('hidden');
-    $('ins-progress-label').textContent = 'Syncing games & starting Stockfish batch worker...';
+    $('ins-progress-label').textContent = maxGames === 0
+      ? 'Syncing full game history & starting Stockfish...'
+      : 'Syncing games & starting Stockfish batch worker...';
     $('ins-progress-stats').textContent = 'Starting...';
     $('ins-progress-fill').style.width = '4%';
     $('ins-analyze-btn').disabled = true;
@@ -751,10 +849,19 @@
         max_games: maxGames,
         depth: 8,
         sync_first: true,
-      });
+      }, pState.startAbortCtrl.signal);
+      pState.startAbortCtrl = null;
+      if (pState.cancelRequested) {
+        api(`/api/insights/jobs/${job.id}/cancel`, 'POST').catch(() => {});
+        return;
+      }
       pState.activeJobId = job.id;
       pollBatchJob(job.id);
     } catch (err) {
+      pState.startAbortCtrl = null;
+      if (err.name === 'AbortError' || pState.cancelRequested) {
+        return;
+      }
       $('ins-progress-label').textContent = `Error: ${err.message}`;
       $('ins-analyze-btn').disabled = false;
     }
@@ -763,8 +870,11 @@
   function pollBatchJob(jobId) {
     clearTimeout(pState.jobPollTimer);
     const tick = async () => {
+      if (pState.cancelRequested || pState.activeJobId !== jobId) return;
       try {
         const job = await api(`/api/insights/jobs/${jobId}`);
+        if (pState.cancelRequested || pState.activeJobId !== jobId) return;
+
         const total = Math.max(1, job.total_games || 1);
         const done = job.completed_games || 0;
         const pct = Math.min(100, Math.round((done / total) * 100));
@@ -773,17 +883,25 @@
         $('ins-progress-stats').textContent = `${done}/${job.total_games} (${job.cached_games} cached · ${job.brilliants_found} !!)`;
         $('ins-progress-fill').style.width = `${pct}%`;
 
-        if (job.status === 'done' || job.status === 'cancelled' || job.status === 'failed') {
+        if (job.status === 'cancelled') {
           $('ins-analyze-btn').disabled = false;
           pState.activeJobId = null;
-          if (job.report_id) {
+          $('ins-progress-box').classList.add('hidden');
+          await loadSavedReportsList();
+          return;
+        }
+
+        if (job.status === 'done' || job.status === 'failed') {
+          $('ins-analyze-btn').disabled = false;
+          pState.activeJobId = null;
+          if (job.status === 'done' && job.report_id) {
             await loadSavedReportsList();
             await openSavedReport(job.report_id);
           }
-          setTimeout(() => $('ins-progress-box').classList.add('hidden'), 2200);
+          setTimeout(() => $('ins-progress-box').classList.add('hidden'), 1800);
           return;
         }
-        pState.jobPollTimer = setTimeout(tick, 900);
+        pState.jobPollTimer = setTimeout(tick, 650);
       } catch (_) {
         $('ins-analyze-btn').disabled = false;
       }
@@ -1105,8 +1223,24 @@
       });
     });
     $('lp-open-board-btn')?.addEventListener('click', () => switchAppView('analyze'));
+    $('lp-open-settings-btn')?.addEventListener('click', () => switchAppView('settings'));
     $('lp-sand-board-btn')?.addEventListener('click', () => switchAppView('analyze'));
     $('lp-signin-btn')?.addEventListener('click', openAccountModal);
+
+    // Settings Tab Controls (Dark Mode + Board Preferences)
+    applyTheme(getTheme());
+    $('setting-darkmode-toggle')?.addEventListener('click', () => {
+      applyTheme(getTheme() === 'dark' ? 'light' : 'dark');
+    });
+    $('setting-sound-toggle')?.addEventListener('click', () => {
+      $('btn-rail-sound')?.click();
+      setTimeout(syncSettingsToggles, 20);
+    });
+    $('setting-coords-toggle')?.addEventListener('click', () => {
+      $('btn-rail-coords')?.click();
+      setTimeout(syncSettingsToggles, 20);
+    });
+    $('setting-open-account-btn')?.addEventListener('click', openAccountModal);
 
     // Landing Hero & Footer CTAs
     $('lp-hero-cta')?.addEventListener('click', handlePrimaryLandingCta);
@@ -1256,14 +1390,38 @@
     });
     bindPillGroup('ins-period-pills', (v) => {
       pState.insPeriod = parseInt(v, 10) || 0;
+      // Selecting "All time" automatically switches Max Games to "All games" (0)
+      if (pState.insPeriod === 0 && $('ins-max-games')) {
+        $('ins-max-games').value = '0';
+      }
     });
     bindPillGroup('ins-platform-pills', (v) => {
       pState.insPlatform = v;
     });
     $('ins-analyze-btn')?.addEventListener('click', () => startBatchInsights());
     $('ins-cancel-btn')?.addEventListener('click', async () => {
-      if (pState.activeJobId) {
-        await api(`/api/insights/jobs/${pState.activeJobId}/cancel`, 'POST');
+      // Stop UI & polling immediately so cancellation feels instant
+      pState.cancelRequested = true;
+      clearTimeout(pState.jobPollTimer);
+      if (pState.startAbortCtrl) {
+        try { pState.startAbortCtrl.abort(); } catch (_) {}
+        pState.startAbortCtrl = null;
+      }
+      const jobToCancel = pState.activeJobId;
+      pState.activeJobId = null;
+
+      $('ins-analyze-btn').disabled = false;
+      $('ins-progress-label').textContent = 'Cancelled — no report saved.';
+      $('ins-progress-stats').textContent = '';
+      setTimeout(() => {
+        if (!pState.activeJobId) $('ins-progress-box')?.classList.add('hidden');
+      }, 650);
+
+      if (jobToCancel) {
+        try {
+          await api(`/api/insights/jobs/${jobToCancel}/cancel`, 'POST');
+        } catch (_) {}
+        await loadSavedReportsList();
       }
     });
 
@@ -1291,7 +1449,7 @@
       let startView = 'home';
       try {
         const saved = sessionStorage.getItem('blunderless_view');
-        if (saved && ['home', 'analyze', 'games', 'insights'].includes(saved)) startView = saved;
+        if (saved && ['home', 'analyze', 'games', 'insights', 'settings'].includes(saved)) startView = saved;
       } catch (_) {}
       switchAppView(startView);
 

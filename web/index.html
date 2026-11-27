@@ -26,7 +26,16 @@
   <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
   <script src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"></script>
 
-  <link rel="stylesheet" href="/static/styles.css?v=28" />
+  <link rel="stylesheet" href="/static/styles.css?v=29" />
+  <script>
+    // Apply saved theme before first paint so dark mode never flashes white
+    (function () {
+      try {
+        var t = localStorage.getItem('blunderless_theme');
+        if (t === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+      } catch (_) {}
+    })();
+  </script>
 </head>
 
 <body>
@@ -44,6 +53,7 @@
       <button class="nav-view-btn" data-view="analyze">♟ ANALYZE</button>
       <button class="nav-view-btn" data-view="games">▤ MY GAMES</button>
       <button class="nav-view-btn" data-view="insights">◈ INSIGHTS</button>
+      <button class="nav-view-btn" data-view="settings">⚙ SETTINGS</button>
     </nav>
 
     <div class="topbar-controls">
@@ -140,6 +150,7 @@
             <a href="#lp-sample" class="lp-nav-link" data-lp-scroll="lp-sample">Sample review</a>
             <a href="#lp-connect" class="lp-nav-link" data-lp-scroll="lp-connect">Connect</a>
             <button type="button" id="lp-open-board-btn" class="lp-nav-link lp-nav-btn-link">Board</button>
+            <button type="button" id="lp-open-settings-btn" class="lp-nav-link lp-nav-btn-link">Settings</button>
             <button type="button" id="lp-signin-btn" class="lp-signin-btn">Sign in</button>
           </nav>
         </div>
@@ -865,6 +876,7 @@
               <option value="40" selected>40 games</option>
               <option value="80">80 games</option>
               <option value="120">120 games</option>
+              <option value="0">All games</option>
             </select>
           </div>
           <button id="ins-analyze-btn" class="btn btn-primary">ANALYZE RAPID</button>
@@ -973,6 +985,94 @@
     </div>
   </section>
 
+  <!-- ══ VIEW 4: SETTINGS (Appearance / Dark Mode & Preferences) ══ -->
+  <section id="view-settings" class="app-view view-scroll hidden" aria-label="Settings">
+    <div class="page-shell settings-shell">
+      <div class="section-bar">
+        <div>
+          <h2 class="section-title">SETTINGS</h2>
+          <div class="section-sub">Customize appearance and workspace preferences. Saved locally in your browser.</div>
+        </div>
+      </div>
+
+      <div class="editorial-card settings-card">
+        <div class="card-head-title">APPEARANCE</div>
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-name">Dark Mode</div>
+            <div class="setting-desc" id="setting-theme-desc">Warm Dark Roast espresso palette for low-light study sessions.</div>
+          </div>
+          <button
+            type="button"
+            id="setting-darkmode-toggle"
+            class="retro-switch"
+            role="switch"
+            aria-checked="false"
+            aria-label="Toggle Dark Mode"
+          >
+            <span class="retro-switch-track">
+              <span class="retro-switch-thumb"></span>
+            </span>
+            <span class="retro-switch-label" id="setting-darkmode-label">LIGHT</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="editorial-card settings-card">
+        <div class="card-head-title">BOARD PREFERENCES</div>
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-name">Wooden Piece Audio</div>
+            <div class="setting-desc">Play mechanical wooden clack sounds on moves, captures, and checks.</div>
+          </div>
+          <button
+            type="button"
+            id="setting-sound-toggle"
+            class="retro-switch active"
+            role="switch"
+            aria-checked="true"
+            aria-label="Toggle Wooden Piece Audio"
+          >
+            <span class="retro-switch-track">
+              <span class="retro-switch-thumb"></span>
+            </span>
+            <span class="retro-switch-label" id="setting-sound-label">ON</span>
+          </button>
+        </div>
+        <div class="setting-row setting-row-border">
+          <div class="setting-info">
+            <div class="setting-name">Board Coordinates</div>
+            <div class="setting-desc">Display file letters (a–h) and rank numbers (1–8) along board edges.</div>
+          </div>
+          <button
+            type="button"
+            id="setting-coords-toggle"
+            class="retro-switch active"
+            role="switch"
+            aria-checked="true"
+            aria-label="Toggle Board Coordinates"
+          >
+            <span class="retro-switch-track">
+              <span class="retro-switch-thumb"></span>
+            </span>
+            <span class="retro-switch-label" id="setting-coords-label">ON</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="editorial-card settings-card">
+        <div class="card-head-title">ACCOUNT &amp; CHESS CONNECTIONS</div>
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-name">Connected Accounts</div>
+            <div class="setting-desc">Link or unlink your Chess.com and Lichess profiles or switch display name.</div>
+          </div>
+          <button type="button" id="setting-open-account-btn" class="btn btn-secondary btn-sm">MANAGE ACCOUNTS</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- ══ Account & Platform Connections Modal ══ -->
   <div id="account-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-label="Account and Connections">
     <div class="modal-card">
@@ -1042,7 +1142,7 @@
   <script src="/static/pieces.js?v=11"></script>
   <script src="/static/app.js?v=25"></script>
   <script src="/static/coach.js?v=26"></script>
-  <script src="/static/platform.js?v=28"></script>
+  <script src="/static/platform.js?v=29"></script>
 </body>
 
 </html>

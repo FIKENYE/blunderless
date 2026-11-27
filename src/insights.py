@@ -27,8 +27,10 @@ from typing import Any, Callable, Optional
 import chess
 
 from src.db import (
+    delete_saved_report,
     get_games_for_report,
     get_linked_accounts,
+    mark_batch_job_cancelled,
     save_game_analysis,
     save_insights_report,
     upsert_batch_job,
@@ -431,10 +433,12 @@ def aggregate_multi_game_report(
 
 
 def cancel_batch_job(job_id: str) -> None:
+    """Signal the running worker to stop immediately and discard any report for this job."""
     with _JOBS_LOCK:
         ev = _CANCEL_FLAGS.get(job_id)
         if ev:
             ev.set()
+    mark_batch_job_cancelled(job_id)
 
 
 def start_batch_analysis_job(
@@ -450,6 +454,7 @@ def start_batch_analysis_job(
     Start a background Stockfish batch analysis thread for the user's games
     matching (platform, time_class, period_days). Reuses cached SQLite analyses
     instantly and persists every newly analysed game as it completes.
+    If cancelled, stops mid-game and does NOT save a partial report.
     """
     games = get_games_for_report(
         user_id=user_id,
@@ -486,11 +491,18 @@ def start_batch_analysis_job(
     with _JOBS_LOCK:
         _CANCEL_FLAGS[job_id] = cancel_ev
 
+    def _call_analyse(pgn: str, engine: Any) -> dict[str, Any]:
+        try:
+            return analyse_fn(pgn, depth=depth, engine=engine, cancel_event=cancel_ev)
+        except TypeError:
+            # Backward compatibility for simple analyse_fn stubs in tests
+            return analyse_fn(pgn, depth=depth, engine=engine)
+
     def _worker() -> None:
         worker_eng = None
         try:
             unanalysed = [g for g in games if not g.get("analysed")]
-            if unanalysed:
+            if unanalysed and not cancel_ev.is_set():
                 worker_eng = get_engine()
 
             completed = 0
@@ -499,8 +511,6 @@ def start_batch_analysis_job(
 
             for g in games:
                 if cancel_ev.is_set():
-                    job["status"] = "cancelled"
-                    job["current_label"] = "Cancelled — progress saved."
                     break
 
                 opp = g["black_user"] if g["user_color"] == "white" else g["white_user"]
@@ -512,24 +522,36 @@ def start_batch_analysis_job(
                     job["current_label"] = f"Analysing vs {opp} ({completed + 1}/{len(games)})..."
                     upsert_batch_job(job)
                     try:
-                        analysis = analyse_fn(g["pgn"], depth=depth, engine=worker_eng)
+                        analysis = _call_analyse(g["pgn"], worker_eng)
+                        if cancel_ev.is_set():
+                            break
                         save_game_analysis(g["id"], analysis, g["user_color"])
-                        # Count brilliants found in this game
                         b_in_game = sum(
                             1 for m in (analysis.get("moves") or [])
                             if m.get("color") == g["user_color"] and m.get("classification") == "brilliant"
                         )
                         brilliants_found += b_in_game
+                    except InterruptedError:
+                        break
                     except Exception:
                         pass
                     completed += 1
 
+                if cancel_ev.is_set():
+                    break
                 job["completed_games"] = completed
                 job["cached_games"] = cached
                 job["brilliants_found"] = brilliants_found
                 upsert_batch_job(job)
 
-            # Build & save final multi-game report from fresh DB state (even if cancelled partway!)
+            # Cancelled jobs must NEVER save or return a report
+            if cancel_ev.is_set():
+                job["status"] = "cancelled"
+                job["report_id"] = None
+                job["current_label"] = "Cancelled — no report saved."
+                upsert_batch_job(job)
+                return
+
             fresh_games = get_games_for_report(
                 user_id=user_id,
                 platform=platform,
@@ -545,6 +567,15 @@ def start_batch_analysis_job(
                 time_class=time_class,
                 period_days=period_days,
             )
+
+            # Re-check right before saving in case cancel arrived during aggregation
+            if cancel_ev.is_set():
+                job["status"] = "cancelled"
+                job["report_id"] = None
+                job["current_label"] = "Cancelled — no report saved."
+                upsert_batch_job(job)
+                return
+
             report_id = save_insights_report(
                 user_id=user_id,
                 platform=platform,
@@ -553,15 +584,29 @@ def start_batch_analysis_job(
                 label=report_label,
                 report_data=report_data,
             )
+
+            # If cancel raced right after insert, delete the freshly saved report
+            if cancel_ev.is_set():
+                delete_saved_report(report_id, user_id)
+                job["status"] = "cancelled"
+                job["report_id"] = None
+                job["current_label"] = "Cancelled — no report saved."
+                upsert_batch_job(job)
+                return
+
             job["report_id"] = report_id
-            if job["status"] != "cancelled":
-                job["status"] = "done"
-                job["current_label"] = f"Report ready ({len(fresh_games)} games)!"
+            job["status"] = "done"
+            job["current_label"] = f"Report ready ({len(fresh_games)} games)!"
             upsert_batch_job(job)
         except Exception as exc:
-            job["status"] = "failed"
-            job["error"] = str(exc)
-            job["current_label"] = f"Error: {exc}"
+            if cancel_ev.is_set():
+                job["status"] = "cancelled"
+                job["report_id"] = None
+                job["current_label"] = "Cancelled — no report saved."
+            else:
+                job["status"] = "failed"
+                job["error"] = str(exc)
+                job["current_label"] = f"Error: {exc}"
             upsert_batch_job(job)
         finally:
             if worker_eng is not None:

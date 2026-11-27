@@ -608,10 +608,11 @@ def get_games_for_report(
         params.append(cutoff)
 
     with _connect(db_path) as conn:
-        rows = conn.execute(
-            f"SELECT * FROM games WHERE {' AND '.join(where)} ORDER BY end_time DESC LIMIT ?",
-            params + [max_games],
-        ).fetchall()
+        sql = f"SELECT * FROM games WHERE {' AND '.join(where)} ORDER BY end_time DESC"
+        if max_games and max_games > 0:
+            rows = conn.execute(f"{sql} LIMIT ?", params + [max_games]).fetchall()
+        else:
+            rows = conn.execute(sql, params).fetchall()
     out = []
     for r in rows:
         d = dict(r)
@@ -742,6 +743,38 @@ def get_batch_job(job_id: str, user_id: int, db_path: Path = DB_PATH) -> Optiona
             (job_id, user_id),
         ).fetchone()
         return dict(row) if row else None
+
+
+def mark_batch_job_cancelled(job_id: str, db_path: Path = DB_PATH) -> Optional[int]:
+    """
+    Immediately mark a batch job cancelled in SQLite and delete any partial report
+    that may have been attached right as cancellation arrived.
+    """
+    now = int(time.time())
+    with _connect(db_path) as conn:
+        row = conn.execute(
+            "SELECT user_id, report_id FROM batch_jobs WHERE id = ?",
+            (job_id,),
+        ).fetchone()
+        deleted_report_id = None
+        if row and row["report_id"] is not None:
+            deleted_report_id = int(row["report_id"])
+            conn.execute(
+                "DELETE FROM saved_reports WHERE id = ? AND user_id = ?",
+                (deleted_report_id, row["user_id"]),
+            )
+        conn.execute(
+            """
+            UPDATE batch_jobs
+            SET status = 'cancelled',
+                report_id = NULL,
+                current_label = 'Cancelled — no report saved.',
+                updated_at = ?
+            WHERE id = ?
+            """,
+            (now, job_id),
+        )
+        return deleted_report_id
 
 
 if __name__ == "__main__":

@@ -1657,31 +1657,82 @@ function filterMovesByClassification(clf, colorFilter = null) {
   goToPly(matchingPlies[0]);
 }
 
-// ── Analysis Requests ───────────────────────────────────────
-async function runAnalysis(customText = null) {
-  const raw = (customText !== null ? customText : pgnInput.value).trim();
+// ── Analysis Requests (Sequenced & Cancellable) ─────────────
+let _analysisLoadSeq = 0;
+let _analysisAbortCtrl = null;
+const ANALYSE_BTN_DEFAULT_HTML = '<span class="cta-glyph">★</span><span>Game Review / Analyse</span>';
+
+function setBoardLoading(isLoading, label = 'Analysing with Stockfish...', seq = null) {
+  if (seq !== null && seq !== _analysisLoadSeq) return;
+  analyseBtn.disabled = Boolean(isLoading);
+  analyseBtn.innerHTML = isLoading
+    ? `<span class="spinner"></span><span>${label}</span>`
+    : ANALYSE_BTN_DEFAULT_HTML;
+}
+
+function beginNewAnalysisLoad(label = 'Analysing with Stockfish...') {
+  _analysisLoadSeq += 1;
+  const seq = _analysisLoadSeq;
+  if (_analysisAbortCtrl) {
+    try { _analysisAbortCtrl.abort(); } catch (_) {}
+  }
+  _analysisAbortCtrl = new AbortController();
+  cancelExplainDemo();
+  exitSubgame(true);
+  clearAnnotations();
+  clearMoveSelection();
+  state.isPreviewingBest = false;
+  setBoardLoading(true, label, seq);
+  setStatus(`<span class="spinner"></span> ${label}`);
+  return { seq, signal: _analysisAbortCtrl.signal };
+}
+
+function cancelPendingAnalysisLoad() {
+  if (!_analysisAbortCtrl) return;
+  _analysisLoadSeq += 1;
+  try { _analysisAbortCtrl.abort(); } catch (_) {}
+  _analysisAbortCtrl = null;
+  document.querySelectorAll('.game-card.loading').forEach(el => el.classList.remove('loading'));
+  setBoardLoading(false);
+}
+
+async function runAnalysis(customText = null, opts = {}) {
+  const raw = (customText !== null && customText !== undefined ? String(customText) : pgnInput.value).trim();
   if (!raw) {
     switchTab('info');
     return setStatus('Paste a PGN or FEN first.', 'error');
   }
 
-  setStatus('<span class="spinner"></span> Analysing with Stockfish...');
-  analyseBtn.disabled = true;
-
+  const label = opts.label || 'Analysing with Stockfish...';
+  const { seq, signal } = beginNewAnalysisLoad(label);
   const isFen = !raw.includes('\n') && raw.split(/\s+/).length === 6;
 
   try {
-    if (isFen) await analyseFen(raw);
-    else await analysePgn(raw);
+    if (isFen) await analyseFen(raw, seq, signal);
+    else await analysePgn(raw, null, opts.targetPly || 0, opts.userHandle || null, seq, signal);
   } catch (err) {
+    if (err?.name === 'AbortError' || seq !== _analysisLoadSeq) return;
     setStatus(err.message, 'error');
+    if (opts.errorBannerContainer) {
+      const existing = opts.errorBannerContainer.querySelector('.games-error-banner');
+      if (existing) existing.remove();
+      const banner = document.createElement('div');
+      banner.className = 'games-error-banner';
+      banner.textContent = `Could not load game: ${err.message}`;
+      opts.errorBannerContainer.prepend(banner);
+    }
   } finally {
-    analyseBtn.disabled = false;
+    if (seq === _analysisLoadSeq) {
+      _analysisAbortCtrl = null;
+      document.querySelectorAll('.game-card.loading').forEach(el => el.classList.remove('loading'));
+      setBoardLoading(false, '', seq);
+    }
   }
 }
 
-async function analyseFen(fen) {
-  const res = await fetchApi('/api/analyse-fen', 'POST', { fen, depth: 12 });
+async function analyseFen(fen, seq = _analysisLoadSeq, signal = null) {
+  const res = await fetchApi('/api/analyse-fen', 'POST', { fen, depth: 12 }, signal);
+  if (seq !== _analysisLoadSeq) return;
 
   state.initialFen = fen;
   state.initialEval = res.engine.score;
@@ -1716,8 +1767,15 @@ async function analyseFen(fen) {
   switchTab('moves');
 }
 
-async function analysePgn(pgn, cachedResult = null, targetPly = 0, userHandleOverride = null) {
-  const res = cachedResult || await fetchApi('/api/analyse-pgn', 'POST', { pgn, depth: 10 });
+async function analysePgn(pgn, cachedResult = null, targetPly = 0, userHandleOverride = null, seq = _analysisLoadSeq, signal = null) {
+  const res = cachedResult || await fetchApi('/api/analyse-pgn', 'POST', { pgn, depth: 10 }, signal);
+  if (seq !== _analysisLoadSeq) return;
+
+  cancelExplainDemo();
+  exitSubgame(true);
+  clearAnnotations();
+  clearMoveSelection();
+  state.isPreviewingBest = false;
 
   if (userHandleOverride) {
     state.searchedUser = userHandleOverride.trim().toLowerCase();
@@ -1770,6 +1828,9 @@ async function loadChessComGames(usernameOverride = null) {
   const username = usernameOverride || $('chesscom-input').value.trim() || $('tab-chesscom-input').value.trim();
   if (!username) return;
 
+  // Prevent an in-flight sample/older game load from yanking the user back out of the Games tab
+  cancelPendingAnalysisLoad();
+
   state.searchedUser = username.trim().toLowerCase();
   $('chesscom-input').value = username;
   $('tab-chesscom-input').value = username;
@@ -1816,11 +1877,26 @@ function renderGameCards(games, currentUser) {
         <span>${date}</span>
       </div>`;
     card.addEventListener('click', () => {
+      if (!g.pgn || !g.pgn.trim()) {
+        const banner = document.createElement('div');
+        banner.className = 'games-error-banner';
+        banner.textContent = 'This game has no PGN moves available to analyse.';
+        gamesList.querySelector('.games-error-banner')?.remove();
+        gamesList.prepend(banner);
+        return;
+      }
+      gamesList.querySelector('.games-error-banner')?.remove();
+      document.querySelectorAll('.game-card.loading').forEach(el => el.classList.remove('loading'));
+      card.classList.add('loading');
+
       state.searchedUser = currentUser.trim().toLowerCase();
-      const shouldFlip = g.black.username.toLowerCase() === state.searchedUser;
-      setBoardOrientation(shouldFlip ? 'black' : 'white');
       pgnInput.value = g.pgn;
-      runAnalysis(g.pgn);
+      if (quickInput) quickInput.value = g.pgn;
+      runAnalysis(g.pgn, {
+        label: `Analysing vs ${oppName}...`,
+        userHandle: currentUser,
+        errorBannerContainer: gamesList,
+      });
     });
     gamesList.appendChild(card);
   }
@@ -1857,9 +1933,10 @@ function setStatus(html, type) {
   statusMsg.className = 'status-msg' + (type ? ' ' + type : '');
 }
 
-async function fetchApi(path, method = 'GET', body = null) {
+async function fetchApi(path, method = 'GET', body = null, signal = null) {
   const opts = { method, headers: { 'Content-Type': 'application/json' } };
   if (body) opts.body = JSON.stringify(body);
+  if (signal) opts.signal = signal;
   const res = await fetch(path, opts);
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
@@ -2611,21 +2688,44 @@ window.BlunderlessCoach = {
 
 // Bridge for Home / My Games / Insights views in platform.js
 window.BlunderlessBoard = {
-  openGame: async (pgn, cachedAnalysis = null, targetPly = 0, userHandle = null) => {
+  beginExternalLoad: (label = 'Loading game...') => {
+    const { seq } = beginNewAnalysisLoad(label);
+    return seq;
+  },
+  endExternalLoad: (seq = null) => {
+    if (seq === null || seq === _analysisLoadSeq) {
+      _analysisAbortCtrl = null;
+      setBoardLoading(false);
+    }
+  },
+  openGame: async (pgn, cachedAnalysis = null, targetPly = 0, userHandle = null, externalSeq = null) => {
+    // If an external caller already started a load token, respect it; otherwise start a fresh one
+    // to immediately cancel any in-flight SAMPLE_PGN or older game analysis!
+    let seq = externalSeq;
+    if (seq !== null && seq !== _analysisLoadSeq) return;
+    if (seq === null) {
+      seq = beginNewAnalysisLoad('Loading game...').seq;
+    }
+
     pgnInput.value = pgn || '';
     if (quickInput) quickInput.value = pgn || '';
-    if (cachedAnalysis) {
-      await analysePgn(pgn, cachedAnalysis, targetPly, userHandle);
-    } else {
-      if (userHandle) state.searchedUser = userHandle.trim().toLowerCase();
-      await runAnalysis(pgn);
-      if (targetPly > 0) goToPly(targetPly);
+    try {
+      if (cachedAnalysis) {
+        await analysePgn(pgn, cachedAnalysis, targetPly, userHandle, seq, null);
+      } else {
+        await runAnalysis(pgn, { targetPly, userHandle });
+      }
+    } finally {
+      if (seq === _analysisLoadSeq) {
+        _analysisAbortCtrl = null;
+        setBoardLoading(false, '', seq);
+      }
     }
   },
   loadSample: () => {
     pgnInput.value = SAMPLE_PGN;
     if (quickInput) quickInput.value = SAMPLE_PGN;
-    runAnalysis(SAMPLE_PGN);
+    runAnalysis(SAMPLE_PGN, { label: 'Loading sample game...' });
   },
   resize: () => {
     window.dispatchEvent(new Event('resize'));

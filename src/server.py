@@ -113,7 +113,7 @@ class InsightsAnalyzeRequest(BaseModel):
     platform: str = Field(default="all", pattern="^(all|chesscom|lichess)$")
     time_class: str = Field(default="rapid", pattern="^(all|bullet|blitz|rapid|daily)$")
     period_days: int = Field(default=30, ge=0, le=3650)
-    max_games: int = Field(default=50, ge=1, le=200)
+    max_games: int = Field(default=50, ge=0, le=5000)
     depth: int = Field(default=8, ge=6, le=16)
     sync_first: bool = Field(default=True)
 
@@ -395,13 +395,18 @@ def parse_and_analyse_pgn(
     pgn_text: str,
     depth: int = 10,
     engine: Optional[Any] = None,
+    cancel_event: Optional[threading.Event] = None,
 ) -> dict[str, Any]:
     """
     Parse a PGN string and evaluate each move sequentially, extracting
     [%clk] timestamps, ratings, opening tags, and 10-tier EPL classifications.
+    Checks `cancel_event` before every ply so batch jobs stop almost instantly.
     """
     if not pgn_text or not pgn_text.strip():
         raise ValueError("PGN text cannot be empty.")
+
+    if cancel_event is not None and cancel_event.is_set():
+        raise InterruptedError("Analysis cancelled.")
 
     cache_key = (hashlib.sha256(pgn_text.strip().encode("utf-8")).hexdigest(), depth)
     if cache_key in _PGN_CACHE:
@@ -419,6 +424,8 @@ def parse_and_analyse_pgn(
 
     board = game.board()
     initial_fen = board.fen()
+    if cancel_event is not None and cancel_event.is_set():
+        raise InterruptedError("Analysis cancelled.")
     prev_info = analyse_position(initial_fen, depth=depth, multipv=2, engine=engine)
     initial_eval = prev_info["score"]
     initial_top_lines = [
@@ -430,6 +437,8 @@ def parse_and_analyse_pgn(
 
     moves_out: list[dict[str, Any]] = []
     for ply_idx, node in enumerate(nodes, start=1):
+        if cancel_event is not None and cancel_event.is_set():
+            raise InterruptedError("Analysis cancelled.")
         move = node.move
         mover_color = board.turn
         move_uci = move.uci()
@@ -663,12 +672,26 @@ def _require_user(request: Request) -> dict[str, Any]:
     return user
 
 
-def _sync_single_account(user_id: int, platform: str, username: str, limit: int = 60, days: Optional[int] = None) -> dict[str, Any]:
-    """Pull profile, live ratings, ELO history, and recent games for Chess.com or Lichess."""
+def _sync_single_account(
+    user_id: int,
+    platform: str,
+    username: str,
+    limit: int = 60,
+    days: Optional[int] = None,
+    max_archives: Optional[int] = 12,
+) -> dict[str, Any]:
+    """Pull profile, live ratings, ELO history, and recent/all games for Chess.com or Lichess."""
     if platform == "chesscom":
         profile = get_player_profile(username)
         stats = get_player_stats(profile["username"])
-        games = get_recent_games(profile["username"], limit=limit, days=days, max_archives=12)
+        fetch_limit = 0 if limit <= 0 else limit
+        fetch_archives = None if limit <= 0 else max_archives
+        games = get_recent_games(
+            profile["username"],
+            limit=fetch_limit,
+            days=days,
+            max_archives=fetch_archives,
+        )
         history = build_rating_history_from_games(profile["username"], games)
         acc = upsert_linked_account(
             user_id=user_id,
@@ -990,15 +1013,17 @@ def start_insights_job_endpoint(payload: InsightsAnalyzeRequest, request: Reques
 
     if payload.sync_first:
         sync_days = payload.period_days if payload.period_days > 0 else None
+        # `max_games == 0` means All games -> fetch full archive history
+        sync_limit = 0 if payload.max_games == 0 else max(payload.max_games, 80)
         for acc in accounts:
             if payload.platform != "all" and acc["platform"] != payload.platform:
                 continue
             try:
                 _sync_single_account(
-                    user["id"],
-                    acc["platform"],
-                    acc["username"],
-                    limit=max(payload.max_games, 80),
+                    user_id=user["id"],
+                    platform=acc["platform"],
+                    username=acc["username"],
+                    limit=sync_limit,
                     days=sync_days,
                 )
             except Exception:
