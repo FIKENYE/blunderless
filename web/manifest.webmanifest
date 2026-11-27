@@ -1,0 +1,25 @@
+{
+  "name": "Blunderless — Chess Analysis & AI Coach",
+  "short_name": "Blunderless",
+  "description": "Link Chess.com & Lichess, track ELO, and get chess coaching grounded strictly in Stockfish.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#FAF6F0",
+  "theme_color": "#FAF6F0",
+  "icons": [
+    {
+      "src": "/static/assets/logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/static/assets/logo.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg",
+      "purpose": "any"
+    }
+  ]
+}

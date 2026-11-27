@@ -6,15 +6,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Blunderless" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <title>Blunderless — Chess Analysis &amp; AI Coach</title>
   <meta name="description" content="Link your Chess.com or Lichess account, find recurring mistakes, and get coaching grounded strictly in Stockfish analysis." />
-  <meta name="theme-color" content="#C86D3B" />
+  <meta name="theme-color" id="meta-theme-color" content="#FAF6F0" />
   <meta property="og:title" content="Blunderless — Stop repeating the same blunders." />
   <meta property="og:description" content="Link your Chess.com and Lichess accounts, track ELO, and get grounded Stockfish coaching with Chester. No hallucinated tactics." />
   <meta property="og:type" content="website" />
   <meta property="og:image" content="/static/assets/logo.jpg" />
+  <link rel="manifest" href="/static/manifest.webmanifest" />
   <link rel="icon" type="image/png" href="/static/assets/logo.png" />
+  <link rel="apple-touch-icon" href="/static/assets/logo.png" />
 
   <!-- Departure Mono via Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -29,13 +32,17 @@
   <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
   <script src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"></script>
 
-  <link rel="stylesheet" href="/static/styles.css?v=32" />
+  <link rel="stylesheet" href="/static/styles.css?v=33" />
   <script>
-    // Apply saved theme before first paint so dark mode never flashes white
+    // Apply saved theme & matching iOS status-bar theme-color before first paint
     (function () {
       try {
         var t = localStorage.getItem('blunderless_theme');
-        if (t === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+        if (t === 'dark') {
+          document.documentElement.setAttribute('data-theme', 'dark');
+          var meta = document.getElementById('meta-theme-color');
+          if (meta) meta.setAttribute('content', '#17110D');
+        }
       } catch (_) {}
     })();
   </script>
@@ -217,6 +224,27 @@
               </label>
               <button type="submit" id="qc-link-btn" class="lp-btn-dark">LINK &amp; SYNC</button>
             </form>
+          </div>
+        </div>
+
+        <!-- Auto-Detected Install-as-App Guide (iPhone/iPad Add to Home Screen & Android PWA) -->
+        <div id="lp-install-wrap" class="lp-inner lp-install-wrap hidden" aria-label="Install Blunderless as an app">
+          <div id="lp-install-card" class="lp-install-card">
+            <div class="lp-install-head">
+              <div class="lp-install-title-group">
+                <img src="/static/assets/logo.png" alt="" class="lp-install-icon" width="32" height="32" />
+                <div>
+                  <div class="lp-install-kicker" id="lp-install-kicker">USE LIKE A NATIVE APP</div>
+                  <h2 class="lp-install-title" id="lp-install-title">Pin Blunderless to your Home Screen</h2>
+                </div>
+              </div>
+              <button type="button" id="lp-install-dismiss" class="lp-install-dismiss" title="Dismiss" aria-label="Dismiss install guide">✕</button>
+            </div>
+            <p class="lp-install-sub" id="lp-install-sub"></p>
+            <div id="lp-install-steps" class="lp-install-steps"></div>
+            <div id="lp-install-cta-row" class="lp-install-cta-row hidden">
+              <button type="button" id="lp-install-native-btn" class="lp-btn-dark">INSTALL BLUNDERLESS APP</button>
+            </div>
           </div>
         </div>
       </section>
@@ -1073,6 +1101,18 @@
           <button type="button" id="setting-open-account-btn" class="btn btn-secondary btn-sm">MANAGE ACCOUNTS</button>
         </div>
       </div>
+
+      <div id="setting-install-card" class="editorial-card settings-card hidden">
+        <div class="card-head-title">HOME SCREEN APP</div>
+        <div class="setting-info">
+          <div class="setting-name" id="setting-install-title">Add Blunderless to your Home Screen</div>
+          <div class="setting-desc" id="setting-install-desc">Launch Blunderless full-screen without browser bars on iPhone, iPad, or Android.</div>
+        </div>
+        <div id="setting-install-steps" class="lp-install-steps"></div>
+        <div id="setting-install-cta-row" class="lp-install-cta-row hidden">
+          <button type="button" id="setting-install-native-btn" class="btn btn-primary btn-sm">INSTALL APP</button>
+        </div>
+      </div>
     </div>
   </section>
 
@@ -1167,9 +1207,9 @@
   </div>
 
   <script src="/static/pieces.js?v=11"></script>
-  <script src="/static/app.js?v=28"></script>
-  <script src="/static/coach.js?v=27"></script>
-  <script src="/static/platform.js?v=32"></script>
+  <script src="/static/app.js?v=29"></script>
+  <script src="/static/coach.js?v=28"></script>
+  <script src="/static/platform.js?v=33"></script>
 </body>
 
 </html>

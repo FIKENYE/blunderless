@@ -1876,7 +1876,13 @@ async function analysePgn(pgn, cachedResult = null, targetPly = 0, userHandleOve
   state.lastKnownOpening = res.headers.opening || 'Starting Position';
   state.lastKnownEco = res.headers.eco || '';
   state.lastBookPly = 0;
-  state.headers = res.headers;
+  // Preserve Termination header even for previously cached analyses by parsing raw PGN as fallback
+  let termination = res.headers.termination || '';
+  if (!termination && typeof pgn === 'string') {
+    const termMatch = pgn.match(/\[Termination\s+"([^"]+)"\]/i);
+    if (termMatch) termination = termMatch[1];
+  }
+  state.headers = { ...res.headers, termination };
 
   engineMeta.textContent = `Stockfish · d${res.depth || 10}`;
 
@@ -2751,6 +2757,34 @@ function updateCoachContext(fen, ply, moveData) {
     destGrid = squareToGrid(moveData.uci.slice(2, 4));
   }
 
+  // Detect resignation on the final move of the game (supports Chess.com & Lichess PGNs)
+  let gameEndType = null;
+  let resignedSide = null;
+  let opponentResigned = false;
+  let userResigned = false;
+  const isFinalPly = ply > 0 && state.moves.length > 0 && ply === state.moves.length;
+  if (isFinalPly) {
+    const resStr = (state.headers.result || '').trim();
+    const termLow = (state.headers.termination || '').toLowerCase();
+    const winnerColor = resStr === '1-0' ? 'white' : (resStr === '0-1' ? 'black' : null);
+    const isMateEnd = Boolean(moveData?.san && moveData.san.includes('#')) || termLow.includes('checkmate');
+    const isOtherEnd =
+      termLow.includes('time') ||
+      termLow.includes('abandon') ||
+      termLow.includes('draw') ||
+      termLow.includes('stalemate') ||
+      termLow.includes('repetition') ||
+      termLow.includes('insufficient') ||
+      termLow.includes('agreement');
+
+    if (winnerColor && !isMateEnd && (termLow.includes('resign') || !isOtherEnd)) {
+      gameEndType = 'resignation';
+      resignedSide = winnerColor === 'white' ? 'black' : 'white';
+      opponentResigned = resignedSide !== userColor;
+      userResigned = resignedSide === userColor;
+    }
+  }
+
   const payload = {
     fen,
     ply,
@@ -2780,6 +2814,10 @@ function updateCoachContext(fen, ply, moveData) {
     moverColor,
     moverName,
     isUserMove,
+    gameEndType,
+    resignedSide,
+    opponentResigned,
+    userResigned,
     soundEnabled: sounds.enabled,
     topLines: state.topLines,
   };

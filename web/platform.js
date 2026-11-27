@@ -43,6 +43,10 @@
     }
     try { localStorage.setItem('blunderless_theme', isDark ? 'dark' : 'light'); } catch (_) { }
 
+    // Keep iOS / Android standalone status bar synced with active theme
+    const metaTheme = $('meta-theme-color');
+    if (metaTheme) metaTheme.setAttribute('content', isDark ? '#17110D' : '#FAF6F0');
+
     const btn = $('setting-darkmode-toggle');
     if (btn) {
       btn.classList.toggle('active', isDark);
@@ -88,6 +92,175 @@
     if (heroArt && global.BlunderlessChesterArt?.buildKnightSvg) {
       heroArt.innerHTML = global.BlunderlessChesterArt.buildKnightSvg(216, 'hero-knight');
     }
+  }
+
+  // ── 1B. Auto-Detected Home Screen App Install Guide (Apple iOS/iPadOS & Android) ──
+  const IOS_SHARE_SVG = '<svg class="install-inline-svg" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2.2 6.2 6l1.3 1.3 1.6-1.6V13h1.8V5.7l1.6 1.6L13.8 6 10 2.2zM4 9.5v7.3h12V9.5h-1.8v5.5H5.8V9.5H4z"/></svg>';
+  const IOS_PLUS_SVG = '<svg class="install-inline-svg" viewBox="0 0 20 20" aria-hidden="true"><path d="M3 3h14v14H3V3zm1.8 1.8v10.4h10.4V4.8H4.8zM9.1 6.5h1.8v2.6h2.6v1.8h-2.6v2.6H9.1v-2.6H6.5V9.1h2.6V6.5z"/></svg>';
+  let _deferredInstallPrompt = null;
+
+  function detectInstallEnv() {
+    const ua = navigator.userAgent || '';
+    const isIPad = /iPad/i.test(ua) || (navigator.platform === 'MacIntel' && (navigator.maxTouchPoints || 0) > 1);
+    const isIPhone = /iPhone|iPod/i.test(ua);
+    const isIOS = isIPhone || isIPad;
+    const isSafari = /Safari/i.test(ua) && !/CriOS|FxiOS|EdgiOS|OPiOS|DuckDuckGo|Instagram|FBAN|FBAV/i.test(ua);
+    const isChromeIOS = /CriOS/i.test(ua);
+    const isAndroid = /Android/i.test(ua);
+    const isStandalone =
+      window.navigator.standalone === true ||
+      Boolean(window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+
+    return { isIPad, isIPhone, isIOS, isSafari, isChromeIOS, isAndroid, isStandalone };
+  }
+
+  function buildInstallConfig(env) {
+    if (env.isIOS && env.isSafari) {
+      const device = env.isIPad ? 'iPad' : 'iPhone';
+      const barPos = env.isIPad ? 'top-right toolbar' : 'bottom toolbar';
+      return {
+        kicker: `DETECTED: ${device.toUpperCase()} SAFARI`,
+        title: `Use Blunderless like a real ${device} app`,
+        sub: 'Pin it to your Home Screen for full-screen analysis with no Safari address bar:',
+        steps: [
+          { num: '1', html: `Tap the <strong>Share</strong> button ${IOS_SHARE_SVG} in Safari's ${barPos}.` },
+          { num: '2', html: `Scroll down and tap <strong>Add to Home Screen</strong> ${IOS_PLUS_SVG}.` },
+          { num: '3', html: 'Tap <strong>Add</strong> in the top-right corner, then open Blunderless from your Home Screen!' },
+        ],
+        showNativeBtn: false,
+      };
+    }
+
+    if (env.isIOS) {
+      const device = env.isIPad ? 'iPad' : 'iPhone';
+      return {
+        kicker: `DETECTED: ${device.toUpperCase()} BROWSER`,
+        title: `Pin Blunderless to your ${device} Home Screen`,
+        sub: env.isChromeIOS
+          ? 'In Chrome on iOS, tap Share in the address bar (or open in Safari for the best experience):'
+          : 'Open Blunderless in Safari so you can pin it full-screen to your Home Screen:',
+        steps: [
+          { num: '1', html: env.isChromeIOS ? `Tap the <strong>Share</strong> icon ${IOS_SHARE_SVG} at the top right of the address bar.` : 'Open this link in <strong>Safari</strong>.' },
+          { num: '2', html: `Choose <strong>Add to Home Screen</strong> ${IOS_PLUS_SVG}.` },
+          { num: '3', html: 'Tap <strong>Add</strong> to launch Blunderless like a native app.' },
+        ],
+        showNativeBtn: false,
+      };
+    }
+
+    if (env.isAndroid) {
+      return {
+        kicker: 'DETECTED: ANDROID',
+        title: 'Install Blunderless on your Home Screen',
+        sub: _deferredInstallPrompt
+          ? 'Install in one tap for full-screen board analysis and instant access:'
+          : 'Pin Blunderless to your Home Screen for a full-screen app experience:',
+        steps: _deferredInstallPrompt
+          ? []
+          : [
+              { num: '1', html: 'Tap the browser <strong>Menu (⋮)</strong> in the top-right corner.' },
+              { num: '2', html: 'Tap <strong>Add to Home screen</strong> or <strong>Install app</strong>.' },
+              { num: '3', html: 'Tap <strong>Install</strong> to launch full-screen anytime.' },
+            ],
+        showNativeBtn: Boolean(_deferredInstallPrompt),
+      };
+    }
+
+    // Desktop fallback: compact tip so desktop users know they can pin it on iPhone/iPad
+    return {
+      kicker: 'IPHONE · IPAD · ANDROID APP MODE',
+      title: 'Pin Blunderless to your phone Home Screen',
+      sub: 'Open Blunderless in Safari on iPhone or iPad, tap Share → Add to Home Screen, and use it full-screen like a native app.',
+      steps: [
+        { num: '1', html: `Open on iPhone/iPad Safari & tap <strong>Share</strong> ${IOS_SHARE_SVG}.` },
+        { num: '2', html: `Tap <strong>Add to Home Screen</strong> ${IOS_PLUS_SVG} → <strong>Add</strong>.` },
+      ],
+      showNativeBtn: Boolean(_deferredInstallPrompt),
+    };
+  }
+
+  function renderInstallCards() {
+    const env = detectInstallEnv();
+    document.body.classList.toggle('standalone-app', env.isStandalone);
+
+    const lpWrap = $('lp-install-wrap');
+    const setCard = $('setting-install-card');
+
+    // Already launched from Home Screen -> hide all install prompts cleanly!
+    if (env.isStandalone) {
+      lpWrap?.classList.add('hidden');
+      setCard?.classList.add('hidden');
+      return;
+    }
+
+    const cfg = buildInstallConfig(env);
+    const stepsHtml = cfg.steps
+      .map(
+        (s) => `
+        <div class="lp-install-step">
+          <span class="lp-install-step-num">${s.num}</span>
+          <span class="lp-install-step-txt">${s.html}</span>
+        </div>`
+      )
+      .join('');
+
+    let dismissed = false;
+    try { dismissed = localStorage.getItem('blunderless_install_dismissed') === '1'; } catch (_) {}
+
+    if (lpWrap) {
+      lpWrap.classList.toggle('hidden', dismissed);
+      if ($('lp-install-kicker')) $('lp-install-kicker').textContent = cfg.kicker;
+      if ($('lp-install-title')) $('lp-install-title').textContent = cfg.title;
+      if ($('lp-install-sub')) $('lp-install-sub').textContent = cfg.sub;
+      if ($('lp-install-steps')) {
+        $('lp-install-steps').innerHTML = stepsHtml;
+        $('lp-install-steps').classList.toggle('hidden', cfg.steps.length === 0);
+      }
+      $('lp-install-cta-row')?.classList.toggle('hidden', !cfg.showNativeBtn);
+    }
+
+    if (setCard) {
+      setCard.classList.remove('hidden');
+      if ($('setting-install-title')) $('setting-install-title').textContent = cfg.title;
+      if ($('setting-install-desc')) $('setting-install-desc').textContent = cfg.sub;
+      if ($('setting-install-steps')) {
+        $('setting-install-steps').innerHTML = stepsHtml;
+        $('setting-install-steps').classList.toggle('hidden', cfg.steps.length === 0);
+      }
+      $('setting-install-cta-row')?.classList.toggle('hidden', !cfg.showNativeBtn);
+    }
+  }
+
+  function initPwaInstallGuide() {
+    renderInstallCards();
+
+    $('lp-install-dismiss')?.addEventListener('click', () => {
+      $('lp-install-wrap')?.classList.add('hidden');
+      try { localStorage.setItem('blunderless_install_dismissed', '1'); } catch (_) {}
+    });
+
+    const triggerNativeInstall = async () => {
+      if (!_deferredInstallPrompt) return;
+      _deferredInstallPrompt.prompt();
+      try { await _deferredInstallPrompt.userChoice; } catch (_) {}
+      _deferredInstallPrompt = null;
+      renderInstallCards();
+    };
+
+    $('lp-install-native-btn')?.addEventListener('click', triggerNativeInstall);
+    $('setting-install-native-btn')?.addEventListener('click', triggerNativeInstall);
+
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      _deferredInstallPrompt = e;
+      renderInstallCards();
+    });
+
+    window.addEventListener('appinstalled', () => {
+      _deferredInstallPrompt = null;
+      $('lp-install-wrap')?.classList.add('hidden');
+      $('setting-install-card')?.classList.add('hidden');
+    });
   }
 
   // Interactive Hero Chester quips & Sample Review showcase switcher
@@ -1209,6 +1382,7 @@
 
   function initPlatform() {
     initBrandArt();
+    initPwaInstallGuide();
 
     // Topbar & Mobile Bottom Tab Navigation
     $('brand-home-btn')?.addEventListener('click', () => switchAppView('home'));

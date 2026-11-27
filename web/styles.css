@@ -2285,8 +2285,22 @@ body {
 .knight-coach-stage[data-state="brilliant_shock"] .expr-brilliant_shock,
 .knight-coach-stage[data-state="flabbergasted"] .expr-flabbergasted,
 .knight-coach-stage[data-state="manic_meltdown"] .expr-manic_meltdown,
-.knight-coach-stage[data-state="depressed"] .expr-depressed {
+.knight-coach-stage[data-state="depressed"] .expr-depressed,
+.knight-coach-stage[data-state="opp_resigned"] .expr-opp_resigned,
+.knight-coach-stage[data-state="user_resigned"] .expr-user_resigned {
   display: inline;
+}
+
+/* Crisp pixel-stepped waving animation for Chester's little white flag */
+.white-flag-wave {
+  transform-box: fill-box;
+  transform-origin: 18% 92%;
+  animation: pixelFlagWave 1.15s steps(3) infinite;
+}
+
+@keyframes pixelFlagWave {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(7deg); }
 }
 
 /* Ears: normal vs drooped in depressed */
@@ -5721,4 +5735,176 @@ body.landing-mode .topbar {
 :root[data-theme="dark"] .mobile-bottom-nav,
 :root[data-theme="dark"] .sidebar-footer {
   border-top-color: rgba(241, 230, 216, 0.28);
+}
+
+/* =========================================================================
+   HOME SCREEN APP INSTALL GUIDE (Apple iOS/iPadOS Safari & Android PWA)
+   ========================================================================= */
+.lp-install-wrap {
+  margin-top: -24px;
+}
+
+.lp-install-card {
+  border: 1.5px solid var(--espresso);
+  background: var(--surface);
+  box-shadow: 4px 4px 0 var(--espresso);
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.lp-install-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.lp-install-title-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.lp-install-icon {
+  width: 34px;
+  height: 34px;
+  border: 1.5px solid var(--espresso);
+  background: var(--canvas);
+  padding: 3px;
+  image-rendering: pixelated;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.lp-install-kicker {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--cta-terracotta);
+}
+
+.lp-install-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--espresso);
+  line-height: 1.25;
+  margin-top: 2px;
+}
+
+.lp-install-dismiss {
+  font-family: var(--font);
+  border: 1px solid var(--border-muted);
+  background: var(--canvas);
+  color: var(--roast);
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  font-size: 12px;
+}
+
+.lp-install-dismiss:hover {
+  background: var(--espresso);
+  color: var(--canvas);
+}
+
+.lp-install-sub {
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--roast);
+}
+
+.lp-install-steps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 10px;
+}
+
+.lp-install-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-muted);
+  background: var(--canvas);
+}
+
+.lp-install-step-num {
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--cta-terracotta);
+  color: #FAF6F0;
+  border: 1px solid var(--espresso);
+  font-size: 11px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.lp-install-step-txt {
+  font-size: 12px;
+  line-height: 1.48;
+  color: var(--espresso);
+}
+
+.install-inline-svg {
+  display: inline-block;
+  width: 15px;
+  height: 15px;
+  vertical-align: -2px;
+  fill: var(--cta-terracotta);
+  margin: 0 2px;
+}
+
+.lp-install-cta-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+:root[data-theme="dark"] .lp-install-card {
+  box-shadow: 4px 4px 0 #090604;
+}
+
+@media (max-width: 767px) {
+  .lp-install-wrap {
+    margin-top: -12px;
+  }
+
+  .lp-install-card {
+    padding: 14px;
+    gap: 10px;
+  }
+
+  .lp-install-title {
+    font-size: 14px;
+  }
+
+  .lp-install-steps {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .lp-install-cta-row .lp-btn-dark {
+    width: 100%;
+  }
+}
+
+/* Native polish when launched from Apple / Android Home Screen (standalone mode) */
+@media (display-mode: standalone) {
+  .lp-nav {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+}
+
+body.standalone-app .lp-nav {
+  padding-top: env(safe-area-inset-top, 0px);
 }

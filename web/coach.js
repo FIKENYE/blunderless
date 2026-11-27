@@ -114,6 +114,10 @@
     `<g class="expr-layer expr-manic_meltdown">${gridToRects(['.EE.EE.', 'E..E..E'], 10, 7)}</g>`,
     // depressed: heavy drooping slanted brow
     `<g class="expr-layer expr-depressed">${gridToRects(['EE.....', '..EEEEE'], 10, 9)}</g>`,
+    // opp_resigned: cocky triumphant victory arch brow
+    `<g class="expr-layer expr-opp_resigned">${gridToRects(['..EEEE.', 'EE....E'], 10, 7)}</g>`,
+    // user_resigned: sheepish upturned surrender brow
+    `<g class="expr-layer expr-user_resigned">${gridToRects(['....EEE', 'EEEE...'], 10, 8)}</g>`,
   ].join('');
 
   const EYES_SVG = [
@@ -174,6 +178,18 @@
       'TTTTT',
       'EEEEE',
     ], 11, 10)}</g>`,
+    // opp_resigned: confident victorious eye
+    `<g class="expr-layer expr-opp_resigned">${gridToRects([
+      'EWWWE',
+      'EEEEE',
+    ], 11, 10)}</g>`,
+    // user_resigned: sheepish wide apologetic eye
+    `<g class="expr-layer expr-user_resigned">${gridToRects([
+      '.EEE.',
+      'EWWWE',
+      'EWWWE',
+      '.EEE.',
+    ], 11, 9)}</g>`,
   ].join('');
 
   const PUPILS_SVG = [
@@ -186,6 +202,8 @@
     `<g class="expr-layer expr-brilliant_shock">${gridToRects(['E'], 13, 10)}</g>`,
     `<g class="expr-layer expr-flabbergasted">${gridToRects(['EE'], 12, 10)}</g>`,
     `<g class="expr-layer expr-manic_meltdown">${gridToRects(['E'], 13, 10)}</g>`,
+    `<g class="expr-layer expr-opp_resigned">${gridToRects(['E'], 12, 10)}</g>`,
+    `<g class="expr-layer expr-user_resigned">${gridToRects(['E'], 14, 10)}</g>`,
   ].join('');
 
   const MOUTH_SVG = [
@@ -235,7 +253,36 @@
       '.EEE',
       'E...',
     ], 3, 16)}</g>`,
+    // opp_resigned: huge triumphant grin mocking the white flag!
+    `<g class="expr-layer expr-opp_resigned">${gridToRects([
+      'EEEEEE',
+      'EWWWWE',
+      '.EEEE.',
+    ], 3, 15)}</g>`,
+    // user_resigned: sheepish tiny surrender frown
+    `<g class="expr-layer expr-user_resigned">${gridToRects([
+      '.EEE.',
+      'E...E',
+    ], 3, 16)}</g>`,
   ].join('');
+
+  // Crisp 32x32 pixel-art waving little white flag (mounted cleanly in open right space x=23..31)
+  const WHITE_FLAG_PIXELS = gridToRects([
+    '.EEEEEE..',
+    'EWWWWWWE.',
+    'EWWWWIIE.',
+    'EWWWWWWE.',
+    'EWWIIWWE.',
+    '.EEEEEE..',
+    '.ET......',
+    '.ET......',
+    '.ET......',
+    '.ET......',
+    '.ET......',
+    '.ET......',
+    '.ET......',
+    '.ET......',
+  ], 23, 5);
 
   const SWEAT_TEAR_SVG = [
     // checkmate_hype: crisp pixel sparkles!
@@ -275,6 +322,18 @@
       'B',
       'B',
     ], 12, 12)}</g>`,
+    // opp_resigned: waving pixel white flag + victory sparkle!
+    `<g class="expr-layer expr-opp_resigned white-flag-wave">${WHITE_FLAG_PIXELS}${gridToRects([
+      '.C.',
+      'CGC',
+      '.C.',
+    ], 19, 2)}</g>`,
+    // user_resigned: sheepish waving pixel white flag + tiny sweat drop
+    `<g class="expr-layer expr-user_resigned white-flag-wave">${WHITE_FLAG_PIXELS}${gridToRects([
+      '.E.',
+      'EBE',
+      '.E.',
+    ], 18, 9)}</g>`,
   ].join('');
 
   function buildKnightSvg(size = 192, idPrefix = 'knight') {
@@ -304,6 +363,8 @@
     flabbergasted: 'CHESTER · MY EYES',
     manic_meltdown: 'CHESTER · LOSING IT',
     depressed: 'CHESTER · GIVEN UP',
+    opp_resigned: 'CHESTER · THEY RESIGNED!',
+    user_resigned: 'CHESTER · WHITE FLAG',
   };
 
   const COMMENTARY_BANK = {
@@ -529,6 +590,25 @@
       'Even {opponentName} is joining the chaos with {moveSan}. Wake me when someone plays {bestMoveSan}...',
       'Watching {opponentName} play {moveSan} in greyscale... neither side wants the full point...',
     ],
+    // ── Resignation Commentary (White Flag!) ──
+    opp_resigned: [
+      'WHITE FLAG!! {opponentName} saw {moveSan}, closed the tab, and resigned!! Take the W!!',
+      'AND {opponentName} WAVES THE WHITE FLAG!! After {moveSan} they had seen enough—GGs!!',
+      '{opponentName} resigned right here! Nothing hits sweeter than making your opponent throw in the towel.',
+      'PACK IT UP!! {opponentName} couldn\'t stomach another move after {moveSan}. Clean victory!',
+      'Boom—{opponentName} hit resign! Raising this little white flag in honor of their departed ELO.',
+      '{opponentName} threw up the white flag! No checkmate needed when the pressure does the talking.',
+      'Resignation accepted! {opponentName} looked at the board after {moveSan} and chose peace.',
+      'GGs! {opponentName} resigned—check the Review tab to see the exact move that broke their spirit!',
+    ],
+    user_resigned: [
+      'Up goes the white flag... tough game against {opponentName}. Shake it off and check the turning point!',
+      'Resigned here—smart to save your energy for the next one. Hit the Eval Graph to see where it slipped.',
+      'Waving the little white flag with you on this one. Every loss is free coaching—check the Review tab!',
+      'Okay, {opponentName} got this round. Tip the king, grab a fresh espresso, and review the key blunder.',
+      'White flag raised! No shame in resigning a lost position—let\'s find the one move that swung it.',
+      'Tough break against {opponentName}. Even grandmasters resign—what matters is spotting why it happened!',
+    ],
   };
 
   // Non-repeating random-ish picker per bucket so lines never repeat back-to-back
@@ -615,8 +695,10 @@
     const recent = ctx.recentBlunders || 0;
     const cleanStreak = ctx.cleanStreak || 0;
 
-    // Heroic overrides ALWAYS break out of greyscale despair!
+    // Heroic / game-ending overrides ALWAYS break out of greyscale despair!
     if (san.includes('#')) return 'checkmate_hype';
+    if (ctx.opponentResigned) return 'opp_resigned';
+    if (ctx.userResigned) return 'user_resigned';
     if (clf === 'brilliant') return 'brilliant_shock';
     if (clf === 'great') return 'smug';
 
@@ -668,13 +750,13 @@
     );
     void mascotBtn.offsetWidth;
 
-    if (newState === 'brilliant_shock' || newState === 'checkmate_hype') {
+    if (newState === 'brilliant_shock' || newState === 'checkmate_hype' || newState === 'opp_resigned') {
       mascotBtn.classList.add('knight-anim-pop');
       setTimeout(() => mascotBtn.classList.remove('knight-anim-pop'), 300);
     } else if (newState === 'flabbergasted' || newState === 'manic_meltdown') {
       mascotBtn.classList.add('knight-anim-shake');
       setTimeout(() => mascotBtn.classList.remove('knight-anim-shake'), 420);
-    } else if (newState === 'depressed') {
+    } else if (newState === 'depressed' || newState === 'user_resigned') {
       mascotBtn.classList.add('knight-anim-slump');
     } else if (newState === 'smug') {
       mascotBtn.classList.add('knight-anim-nod');
@@ -754,6 +836,10 @@
     const tone = ctx.tone || 'instructive';
     const clf = (ctx.classification || '').toLowerCase();
     const isUser = ctx.isUserMove !== false;
+
+    // Resignation takes priority regardless of whose move was played last
+    if (knightState === 'opp_resigned') return pickLine('opp_resigned', ctx);
+    if (knightState === 'user_resigned') return pickLine('user_resigned', ctx);
 
     // Opponent move: explicitly reference {opponentName} so Chester knows who moved!
     if (!isUser) {
@@ -849,7 +935,7 @@
 
   function handlePositionAnalyzed(ctx) {
     if (!ctx) return;
-    const key = `${ctx.fen}|${ctx.ply}|${ctx.playedMoveUci || ''}|${ctx.isUserMove}`;
+    const key = `${ctx.fen}|${ctx.ply}|${ctx.playedMoveUci || ''}|${ctx.isUserMove}|${ctx.gameEndType || ''}`;
     const prevState = _currentState;
     const newState = determineKnightState(ctx);
 

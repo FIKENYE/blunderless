@@ -505,6 +505,7 @@ def parse_and_analyse_pgn(
         "white_elo": game.headers.get("WhiteElo", ""),
         "black_elo": game.headers.get("BlackElo", ""),
         "result": game.headers.get("Result", "*"),
+        "termination": game.headers.get("Termination", ""),
         "date": game.headers.get("Date", ""),
         "eco": game.headers.get("ECO", ""),
         "opening": game.headers.get("Opening", ""),
