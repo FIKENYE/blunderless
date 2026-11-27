@@ -41,7 +41,7 @@
     } else {
       document.documentElement.removeAttribute('data-theme');
     }
-    try { localStorage.setItem('blunderless_theme', isDark ? 'dark' : 'light'); } catch (_) {}
+    try { localStorage.setItem('blunderless_theme', isDark ? 'dark' : 'light'); } catch (_) { }
 
     const btn = $('setting-darkmode-toggle');
     if (btn) {
@@ -172,7 +172,7 @@
     if (!valid.includes(viewName)) viewName = 'home';
     const wasSameView = pState.view === viewName;
     pState.view = viewName;
-    try { sessionStorage.setItem('blunderless_view', viewName); } catch (_) {}
+    try { sessionStorage.setItem('blunderless_view', viewName); } catch (_) { }
 
     document.querySelectorAll('.nav-view-btn, .mobile-nav-btn').forEach((btn) => {
       const isActive = btn.dataset.view === viewName;
@@ -215,7 +215,7 @@
 
   async function openLibraryGame(gameId, targetPly = 0) {
     if (_openGameAbortCtrl) {
-      try { _openGameAbortCtrl.abort(); } catch (_) {}
+      try { _openGameAbortCtrl.abort(); } catch (_) { }
     }
     const ctrl = new AbortController();
     _openGameAbortCtrl = ctrl;
@@ -520,7 +520,7 @@
       const data = await api('/api/home/dashboard');
       pState.dashboard = data;
       renderHomeView(data);
-    } catch (_) {}
+    } catch (_) { }
   }
 
   function renderHomeView(data) {
@@ -806,7 +806,7 @@
       if (!pState.activeReportId && reports.length > 0) {
         openSavedReport(reports[0].id);
       }
-    } catch (_) {}
+    } catch (_) { }
   }
 
   async function openSavedReport(reportId) {
@@ -838,7 +838,7 @@
     pState.cancelRequested = false;
     clearTimeout(pState.jobPollTimer);
     if (pState.startAbortCtrl) {
-      try { pState.startAbortCtrl.abort(); } catch (_) {}
+      try { pState.startAbortCtrl.abort(); } catch (_) { }
     }
     pState.startAbortCtrl = new AbortController();
 
@@ -862,7 +862,7 @@
       }, pState.startAbortCtrl.signal);
       pState.startAbortCtrl = null;
       if (pState.cancelRequested) {
-        api(`/api/insights/jobs/${job.id}/cancel`, 'POST').catch(() => {});
+        api(`/api/insights/jobs/${job.id}/cancel`, 'POST').catch(() => { });
         return;
       }
       pState.activeJobId = job.id;
@@ -1088,16 +1088,16 @@
         </thead>
         <tbody>
           ${['opening', 'middlegame', 'endgame']
-            .map((st) => {
-              const row = mm[st] || {};
-              return `<tr>
+        .map((st) => {
+          const row = mm[st] || {};
+          return `<tr>
                 <td class="mx-phase">${st.toUpperCase()}</td>
                 <td class="mx-cell mx-inacc">${row.inaccuracy || 0}</td>
                 <td class="mx-cell mx-mist">${row.mistake || 0}</td>
                 <td class="mx-cell mx-blun">${row.blunder || 0}</td>
               </tr>`;
-            })
-            .join('')}
+        })
+        .join('')}
         </tbody>
       </table>`;
 
@@ -1148,11 +1148,11 @@
         <div class="op-col">
           <div class="op-col-head">${title}</div>
           ${rows
-            .map((r) => {
-              const wPct = Math.round((r.wins / r.games) * 100);
-              const dPct = Math.round((r.draws / r.games) * 100);
-              const lPct = Math.max(0, 100 - wPct - dPct);
-              return `
+          .map((r) => {
+            const wPct = Math.round((r.wins / r.games) * 100);
+            const dPct = Math.round((r.draws / r.games) * 100);
+            const lPct = Math.max(0, 100 - wPct - dPct);
+            return `
                 <div class="op-row">
                   <div class="op-row-top">
                     <span class="op-name">${escHtml(r.name)}</span>
@@ -1164,8 +1164,8 @@
                     <div class="op-seg-l" style="width:${lPct}%"></div>
                   </div>
                 </div>`;
-            })
-            .join('')}
+          })
+          .join('')}
         </div>`;
     };
     $('ins-openings-grid').innerHTML = renderOpCol('○ AS WHITE', ops.white) + renderOpCol('● AS BLACK', ops.black);
@@ -1414,7 +1414,7 @@
       pState.cancelRequested = true;
       clearTimeout(pState.jobPollTimer);
       if (pState.startAbortCtrl) {
-        try { pState.startAbortCtrl.abort(); } catch (_) {}
+        try { pState.startAbortCtrl.abort(); } catch (_) { }
         pState.startAbortCtrl = null;
       }
       const jobToCancel = pState.activeJobId;
@@ -1430,7 +1430,7 @@
       if (jobToCancel) {
         try {
           await api(`/api/insights/jobs/${jobToCancel}/cancel`, 'POST');
-        } catch (_) {}
+        } catch (_) { }
         await loadSavedReportsList();
       }
     });
@@ -1452,7 +1452,7 @@
     if (authError || authOk) {
       try {
         window.history.replaceState({}, document.title, window.location.pathname);
-      } catch (_) {}
+      } catch (_) { }
     }
 
     refreshAuth().then(() => {
@@ -1460,7 +1460,7 @@
       try {
         const saved = sessionStorage.getItem('blunderless_view');
         if (saved && ['home', 'analyze', 'games', 'insights', 'settings'].includes(saved)) startView = saved;
-      } catch (_) {}
+      } catch (_) { }
       switchAppView(startView);
 
       if (authError) {
