@@ -4631,3 +4631,19 @@ body.landing-mode .topbar {
 :root[data-theme="dark"] .tag-chesscom { background: rgba(82, 183, 88, 0.2); color: #7EE083; }
 :root[data-theme="dark"] .tag-lichess  { background: rgba(241, 230, 216, 0.14); color: #F1E6D8; }
 :root[data-theme="dark"] .platform-chip.chip-lichess { border-left-color: #F1E6D8; }
+
+.game-card.loading {
+  border-color: var(--cta-terracotta);
+  background: rgba(200, 109, 59, 0.14);
+  opacity: 0.85;
+}
+
+.games-error-banner {
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  border: 1.5px solid var(--c-blunder);
+  background: rgba(183, 28, 28, 0.1);
+  color: var(--c-blunder);
+  font-size: 11.5px;
+  font-weight: 700;
+}
