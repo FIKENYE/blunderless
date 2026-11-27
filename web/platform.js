@@ -64,6 +64,52 @@
     if (pState.dashboard && pState.view === 'home') renderHomeEloChart();
   }
 
+  // ── Cloud-Synced Preferences Helpers ────────────────────────────────
+  function getStoredTone() {
+    try { return localStorage.getItem('blunderless_tone') || 'auto'; } catch (_) { return 'auto'; }
+  }
+
+  function getStoredDepth() {
+    try {
+      const n = parseInt(localStorage.getItem('blunderless_depth') || '10', 10);
+      return Number.isFinite(n) && n >= 6 && n <= 18 ? n : 10;
+    } catch (_) {
+      return 10;
+    }
+  }
+
+  function pushPreferencesToCloud(patch) {
+    if (!pState.auth?.authenticated) return;
+    // Backend accepts instructive|analytical|sarcastic; skip 'auto' when syncing tone
+    const clean = { ...patch };
+    if (clean.tone === 'auto') delete clean.tone;
+    if (Object.keys(clean).length === 0) return;
+    api('/api/user/preferences', 'PUT', clean).catch(() => {});
+  }
+
+  function applyCloudPreferences(prefs) {
+    if (!prefs || typeof prefs !== 'object') return;
+    if (prefs.theme === 'dark' || prefs.theme === 'light') {
+      applyTheme(prefs.theme);
+    }
+    if (prefs.tone && ['instructive', 'analytical', 'sarcastic'].includes(prefs.tone)) {
+      const cur = getStoredTone();
+      if (cur === 'auto' || cur !== prefs.tone) {
+        try { localStorage.setItem('blunderless_tone', prefs.tone); } catch (_) {}
+      }
+    }
+    if (prefs.depth) {
+      try { localStorage.setItem('blunderless_depth', String(prefs.depth)); } catch (_) {}
+    }
+    syncSettingsToggles();
+  }
+
+  function registerServiceWorker() {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {});
+    }
+  }
+
   function syncSettingsToggles() {
     const soundBtn = $('btn-rail-sound');
     const coordsBtn = $('btn-rail-coords');
@@ -83,6 +129,11 @@
       cToggle.setAttribute('aria-checked', coordsOn ? 'true' : 'false');
     }
     if ($('setting-coords-label')) $('setting-coords-label').textContent = coordsOn ? 'ON' : 'OFF';
+
+    const toneSel = $('setting-tone-select');
+    if (toneSel) toneSel.value = getStoredTone();
+    const depthSel = $('setting-depth-select');
+    if (depthSel) depthSel.value = String(getStoredDepth());
   }
 
   // ── 1. Brand Art & Landing Interactive Data ─────────────────────────
@@ -425,7 +476,10 @@
     try {
       pState.auth = await api('/api/auth/me');
     } catch (_) {
-      pState.auth = { authenticated: false, linked_accounts: [], google_configured: false };
+      pState.auth = { authenticated: false, linked_accounts: [], google_configured: false, storage_mode: 'sqlite' };
+    }
+    if (pState.auth?.authenticated && pState.auth?.preferences) {
+      applyCloudPreferences(pState.auth.preferences);
     }
     renderAuthUI();
     return pState.auth;
@@ -436,6 +490,23 @@
     const pillAvatar = $('account-pill-avatar');
     const pillName = $('account-pill-name');
     const accounts = auth.linked_accounts || [];
+    const isCloud = auth.storage_mode === 'postgres';
+
+    // Storage sync badges
+    const badge = $('modal-storage-badge');
+    if (badge) {
+      badge.textContent = isCloud ? '☁ CLOUD SYNC' : '💾 LOCAL DB';
+      badge.className = `storage-badge ${isCloud ? 'storage-cloud' : 'storage-local'}`;
+      badge.title = isCloud
+        ? 'Connected to Cloud PostgreSQL — sign in from any device!'
+        : 'Running on local SQLite. Set DATABASE_URL on Render for multi-device cloud persistence.';
+    }
+    const storageDesc = $('setting-storage-desc');
+    if (storageDesc) {
+      storageDesc.textContent = isCloud
+        ? 'Cloud PostgreSQL active: your account, games, cached analyses, and settings sync across all devices.'
+        : 'Account login enabled (local SQLite). Add DATABASE_URL on Render for persistent cloud sync across deploys.';
+    }
 
     if (auth.authenticated && auth.user) {
       const name = auth.user.display_name || 'Player';
@@ -459,10 +530,14 @@
     $('modal-signed-in')?.classList.toggle('hidden', !auth.authenticated);
     if (auth.authenticated && auth.user) {
       $('modal-user-name').textContent = auth.user.display_name;
-      $('modal-user-sub').textContent =
-        auth.user.provider === 'google'
-          ? `Google Account · ${auth.user.email || ''}`
-          : 'Local Blunderless Profile';
+      const identLabel = auth.user.email || (auth.user.username ? `@${auth.user.username}` : '');
+      if (auth.user.provider === 'google') {
+        $('modal-user-sub').textContent = `Google Account · ${identLabel}`;
+      } else if (auth.user.provider === 'account' || auth.user.has_password) {
+        $('modal-user-sub').textContent = `${isCloud ? 'Cloud' : 'Blunderless'} Account · ${identLabel}`;
+      } else {
+        $('modal-user-sub').textContent = 'Guest Profile (create an account for cross-device login)';
+      }
     }
 
     // Only show Google OAuth controls when configured on the server
@@ -1276,6 +1351,39 @@
         </tbody>
       </table>`;
 
+    // 6.5 Time Management & Clock Trouble
+    const tm = rep.time_management || {};
+    const tmCard = $('ins-time-card');
+    const tmBody = $('ins-time-body');
+    if (tmCard && tmBody) {
+      if (!tm.has_clock_data) {
+        tmCard.classList.add('hidden');
+      } else {
+        tmCard.classList.remove('hidden');
+        tmBody.innerHTML = `
+          <div class="mini-metric-box">
+            <div class="mm-title">Avg Time / Move</div>
+            <div class="mm-val">${tm.avg_time_per_move != null ? `${tm.avg_time_per_move}s` : '—'}</div>
+            <div class="mm-sub">Across ${tm.moves_with_clock || 0} clocked moves</div>
+          </div>
+          <div class="mini-metric-box">
+            <div class="mm-title">Rushed Blunders</div>
+            <div class="mm-val val-amber">${tm.rushed_blunder_pct || 0}%</div>
+            <div class="mm-sub">${tm.rushed_blunders || 0} of ${tm.total_blunders_with_clock || 0} errors (&lt;5s with ample time)</div>
+          </div>
+          <div class="mini-metric-box">
+            <div class="mm-title">Time-Trouble Blunders</div>
+            <div class="mm-val val-red">${tm.time_trouble_blunder_pct || 0}%</div>
+            <div class="mm-sub">${tm.time_trouble_blunders || 0} errors under low clock</div>
+          </div>
+          <div class="mini-metric-box">
+            <div class="mm-title">Accuracy: Normal vs Low Clock</div>
+            <div class="mm-val">${tm.normal_time_accuracy != null ? `${tm.normal_time_accuracy}%` : '—'} / ${tm.time_trouble_accuracy != null ? `${tm.time_trouble_accuracy}%` : '—'}</div>
+            <div class="mm-sub">${tm.time_trouble_moves || 0} moves played in time trouble</div>
+          </div>`;
+      }
+    }
+
     // 7. How Your Games End
     const endData = rep.game_endings || {};
     const termColors = {
@@ -1383,6 +1491,7 @@
   function initPlatform() {
     initBrandArt();
     initPwaInstallGuide();
+    registerServiceWorker();
 
     // Topbar & Mobile Bottom Tab Navigation
     $('brand-home-btn')?.addEventListener('click', () => switchAppView('home'));
@@ -1413,18 +1522,38 @@
     $('lp-sand-board-btn')?.addEventListener('click', () => switchAppView('analyze'));
     $('lp-signin-btn')?.addEventListener('click', openAccountModal);
 
-    // Settings Tab Controls (Dark Mode + Board Preferences)
+    // Settings Tab Controls (Dark Mode + Board + Chester/Engine Preferences)
     applyTheme(getTheme());
     $('setting-darkmode-toggle')?.addEventListener('click', () => {
-      applyTheme(getTheme() === 'dark' ? 'light' : 'dark');
+      const next = getTheme() === 'dark' ? 'light' : 'dark';
+      applyTheme(next);
+      pushPreferencesToCloud({ theme: next });
     });
     $('setting-sound-toggle')?.addEventListener('click', () => {
       $('btn-rail-sound')?.click();
-      setTimeout(syncSettingsToggles, 20);
+      setTimeout(() => {
+        syncSettingsToggles();
+        const soundOn = $('btn-rail-sound')?.classList.contains('active') ?? true;
+        pushPreferencesToCloud({ sound: soundOn });
+      }, 25);
     });
     $('setting-coords-toggle')?.addEventListener('click', () => {
       $('btn-rail-coords')?.click();
-      setTimeout(syncSettingsToggles, 20);
+      setTimeout(() => {
+        syncSettingsToggles();
+        const coordsOn = $('btn-rail-coords')?.classList.contains('active') ?? true;
+        pushPreferencesToCloud({ coords: coordsOn });
+      }, 25);
+    });
+    $('setting-tone-select')?.addEventListener('change', (e) => {
+      const val = e.target.value || 'auto';
+      try { localStorage.setItem('blunderless_tone', val); } catch (_) {}
+      pushPreferencesToCloud({ tone: val });
+    });
+    $('setting-depth-select')?.addEventListener('change', (e) => {
+      const val = parseInt(e.target.value, 10) || 10;
+      try { localStorage.setItem('blunderless_depth', String(val)); } catch (_) {}
+      pushPreferencesToCloud({ depth: val });
     });
     $('setting-open-account-btn')?.addEventListener('click', openAccountModal);
 
@@ -1507,6 +1636,70 @@
       if (e.target.id === 'account-modal') closeAccountModal();
     });
     $('modal-google-btn')?.addEventListener('click', handleGoogleSignIn);
+
+    // Account Mode Switcher (Sign In vs Create Account)
+    const setAuthTab = (mode) => {
+      const isReg = mode === 'register';
+      $('auth-tab-login')?.classList.toggle('active', !isReg);
+      $('auth-tab-register')?.classList.toggle('active', isReg);
+      $('auth-tab-login')?.setAttribute('aria-selected', !isReg ? 'true' : 'false');
+      $('auth-tab-register')?.setAttribute('aria-selected', isReg ? 'true' : 'false');
+      $('modal-login-form')?.classList.toggle('hidden', isReg);
+      $('modal-register-form')?.classList.toggle('hidden', !isReg);
+      if ($('modal-status')) $('modal-status').textContent = '';
+    };
+    $('auth-tab-login')?.addEventListener('click', () => setAuthTab('login'));
+    $('auth-tab-register')?.addEventListener('click', () => setAuthTab('register'));
+
+    $('modal-login-form')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const ident = $('modal-login-ident')?.value.trim();
+      const pw = $('modal-login-pass')?.value || '';
+      const btn = $('modal-login-submit');
+      if (!ident || !pw) return;
+      if (btn) btn.disabled = true;
+      $('modal-status').textContent = 'Signing in...';
+      try {
+        const res = await api('/api/auth/login', 'POST', { identifier: ident, password: pw });
+        $('modal-login-pass').value = '';
+        $('modal-status').textContent = `Welcome back, ${res.user.display_name}!`;
+        await refreshAuth();
+        await loadHomeDashboard();
+        if (pState.view === 'games') loadGamesLibrary();
+        if (pState.view === 'insights') loadSavedReportsList();
+      } catch (err) {
+        $('modal-status').textContent = `Sign-in failed: ${err.message}`;
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    });
+
+    $('modal-register-form')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const ident = $('modal-reg-ident')?.value.trim();
+      const displayName = $('modal-reg-name')?.value.trim() || '';
+      const pw = $('modal-reg-pass')?.value || '';
+      const btn = $('modal-reg-submit');
+      if (!ident || !pw) return;
+      if (btn) btn.disabled = true;
+      $('modal-status').textContent = 'Creating your account...';
+      try {
+        const res = await api('/api/auth/register', 'POST', {
+          identifier: ident,
+          password: pw,
+          display_name: displayName,
+        });
+        $('modal-reg-pass').value = '';
+        $('modal-status').textContent = `Account created for ${res.user.display_name}! Link Chess.com or Lichess below.`;
+        await refreshAuth();
+        await loadHomeDashboard();
+      } catch (err) {
+        $('modal-status').textContent = `Could not register: ${err.message}`;
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    });
+
     $('modal-local-btn')?.addEventListener('click', async () => {
       const name = $('modal-local-name').value.trim();
       if (!name) return;

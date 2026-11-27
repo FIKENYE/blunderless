@@ -152,6 +152,16 @@ def aggregate_multi_game_report(
     }
     best_moments: list[dict[str, Any]] = []
 
+    # Time-management accumulators across analysed games
+    tm_moves_with_clock = 0
+    tm_total_spent_sec = 0.0
+    tm_time_trouble_moves = 0
+    tm_time_trouble_blunders = 0
+    tm_rushed_blunders = 0
+    tm_total_blunders_clock = 0
+    tm_tt_acc_list: list[float] = []
+    tm_normal_acc_list: list[float] = []
+
     for g in ordered:
         res = g.get("user_result", "draw")
         u_col = g.get("user_color", "white")
@@ -235,6 +245,27 @@ def aggregate_multi_game_report(
                 st_obj = stages.get(st_name) or {}
                 if st_obj.get("reached") and st_obj.get("accuracy") is not None:
                     phase_acc_lists[st_name].append(float(st_obj["accuracy"]))
+
+            # Aggregate per-game clock diagnostics (back-computing if game was cached before clock feature)
+            side_clock = game_rep.get("clock")
+            if not side_clock and moves and any(m.get("clock_seconds") is not None for m in moves):
+                from src.report import compute_clock_analysis
+                side_clock = compute_clock_analysis(
+                    moves, headers=analysis.get("headers") or {"time_control": g.get("time_control", "")}
+                ).get(u_col)
+            if side_clock and side_clock.get("has_clock_data"):
+                m_cnt = int(side_clock.get("moves_with_clock") or 0)
+                if m_cnt > 0 and side_clock.get("avg_time_spent") is not None:
+                    tm_moves_with_clock += m_cnt
+                    tm_total_spent_sec += float(side_clock["avg_time_spent"]) * m_cnt
+                tm_time_trouble_moves += int(side_clock.get("time_trouble_moves") or 0)
+                tm_time_trouble_blunders += int(side_clock.get("time_trouble_blunders") or 0)
+                tm_rushed_blunders += int(side_clock.get("rushed_blunders") or 0)
+                tm_total_blunders_clock += int(side_clock.get("total_blunders_with_clock") or 0)
+                if side_clock.get("time_trouble_accuracy") is not None:
+                    tm_tt_acc_list.append(float(side_clock["time_trouble_accuracy"]))
+                if side_clock.get("normal_accuracy") is not None:
+                    tm_normal_acc_list.append(float(side_clock["normal_accuracy"]))
 
             # Helper to map move_number -> phase from saved report ranges
             def _phase_for_move(mv_num: int) -> str:
@@ -368,6 +399,22 @@ def aggregate_multi_game_report(
             f"with a {win_rate}% win rate. {phase_note}"
         )
 
+    tm_other_blunders = max(0, tm_total_blunders_clock - tm_rushed_blunders - tm_time_trouble_blunders)
+    time_management = {
+        "has_clock_data": tm_moves_with_clock > 0,
+        "moves_with_clock": tm_moves_with_clock,
+        "avg_time_per_move": round(tm_total_spent_sec / tm_moves_with_clock, 1) if tm_moves_with_clock else None,
+        "time_trouble_moves": tm_time_trouble_moves,
+        "time_trouble_blunders": tm_time_trouble_blunders,
+        "rushed_blunders": tm_rushed_blunders,
+        "other_blunders": tm_other_blunders,
+        "total_blunders_with_clock": tm_total_blunders_clock,
+        "rushed_blunder_pct": round((tm_rushed_blunders / tm_total_blunders_clock) * 100) if tm_total_blunders_clock else 0,
+        "time_trouble_blunder_pct": round((tm_time_trouble_blunders / tm_total_blunders_clock) * 100) if tm_total_blunders_clock else 0,
+        "time_trouble_accuracy": round(sum(tm_tt_acc_list) / len(tm_tt_acc_list), 1) if tm_tt_acc_list else None,
+        "normal_time_accuracy": round(sum(tm_normal_acc_list) / len(tm_normal_acc_list), 1) if tm_normal_acc_list else None,
+    }
+
     return {
         "meta": {
             "platform": platform,
@@ -423,6 +470,7 @@ def aggregate_multi_game_report(
             "allowed_pct": allowed_pct,
             "missed_pct": missed_pct,
         },
+        "time_management": time_management,
         "game_endings": {k: dict(v) for k, v in endings.items()},
         "openings": {
             "white": _format_openings(openings_stats["white"]),

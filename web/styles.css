@@ -5908,3 +5908,244 @@ body.landing-mode .topbar {
 body.standalone-app .lp-nav {
   padding-top: env(safe-area-inset-top, 0px);
 }
+
+
+/* =========================================================
+   V3.1 Additions — Cloud Auth, Facts Drawer, Key Moments,
+   Retry Mistake, Clock Chart, Insights Time Card & Sharing
+   ========================================================= */
+
+/* Chester Grounded Facts Drawer */
+.knight-facts-drawer {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-top: 1px dashed var(--border-muted);
+  background: var(--surface-warm);
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--espresso);
+  max-height: 148px;
+  overflow-y: auto;
+  border-radius: 3px;
+}
+
+.knight-facts-drawer .facts-head {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--roast);
+  margin-bottom: 4px;
+  font-weight: 700;
+}
+
+.knight-facts-drawer .facts-row {
+  margin-top: 3px;
+}
+
+.knight-facts-drawer .facts-bad strong {
+  color: var(--c-blunder);
+}
+
+.knight-facts-drawer .facts-good strong {
+  color: var(--c-best);
+}
+
+.knight-mini-btn.active {
+  background: var(--espresso);
+  color: var(--canvas);
+}
+
+/* Key Moments Walkthrough & Retry Strip */
+.key-moments-strip {
+  border-top: 1px solid var(--border-muted);
+  padding: 7px 10px;
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.km-nav-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.km-counter {
+  font-size: 11px;
+  color: var(--ink-soft);
+  text-align: center;
+  flex: 1 1 auto;
+  min-width: 90px;
+}
+
+.retry-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  background: var(--surface-warm);
+  border: 1px solid var(--caramel);
+  border-radius: 4px;
+  font-size: 11px;
+  color: var(--espresso);
+}
+
+.retry-status {
+  flex: 1 1 auto;
+  line-height: 1.35;
+}
+
+.retry-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+/* Clock Per-Move Chart & Share Row in Review Tab */
+.clock-chart-card {
+  margin-top: 10px;
+}
+
+.clock-graph-svg {
+  height: 84px;
+}
+
+.clock-pills-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.clock-pill {
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 3px;
+  border: 1px solid var(--border-muted);
+  background: var(--surface-warm);
+  color: var(--espresso);
+}
+
+.clock-pill-warn {
+  border-color: var(--c-inaccuracy);
+  color: var(--c-inaccuracy);
+}
+
+.clock-pill-danger {
+  border-color: var(--c-blunder);
+  color: var(--c-blunder);
+}
+
+.review-share-row {
+  display: flex;
+  gap: 8px;
+  margin: 10px 0;
+  flex-wrap: wrap;
+}
+
+.review-share-row .btn {
+  flex: 1 1 140px;
+}
+
+/* Insights Time Management Grid */
+.ins-time-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+/* Cloud Account Modal Tabs & Sync Badge */
+.modal-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.modal-section-head .modal-section-title {
+  margin-bottom: 0;
+}
+
+.storage-badge {
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 3px;
+  border: 1px solid var(--border-muted);
+  letter-spacing: 0.04em;
+  font-weight: 700;
+}
+
+.storage-cloud {
+  background: rgba(46, 125, 50, 0.12);
+  border-color: var(--c-best);
+  color: var(--c-best);
+}
+
+.storage-local {
+  background: var(--surface-warm);
+  color: var(--roast);
+}
+
+.auth-mode-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.auth-tab-btn {
+  font-family: var(--font);
+  font-size: 12px;
+  padding: 7px 10px;
+  border: 1px solid var(--border-muted);
+  background: var(--surface);
+  color: var(--ink-soft);
+  cursor: pointer;
+  border-radius: 3px;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.auth-tab-btn.active {
+  background: var(--espresso);
+  color: var(--canvas);
+  border-color: var(--espresso);
+}
+
+.auth-stack-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.guest-profile-details {
+  margin-top: 10px;
+  font-size: 11px;
+  color: var(--roast);
+}
+
+.guest-profile-details summary {
+  cursor: pointer;
+  user-select: none;
+}
+
+/* Settings Selects */
+.setting-select {
+  min-width: 168px;
+}
+
+@media (max-width: 640px) {
+  .setting-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .setting-select {
+    width: 100%;
+  }
+}

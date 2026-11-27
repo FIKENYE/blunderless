@@ -258,6 +258,18 @@ const state = {
     originPly: 0,
     timers: [],
   },
+  retry: {
+    active: false,
+    targetPly: 0,
+    branchPly: 0,
+    bestMove: null,
+    bestMoveSan: null,
+    playedSan: null,
+    triesLeft: 2,
+    solved: false,
+    prevShowBest: false,
+  },
+  summary: null,
   headers: {
     white: 'White', black: 'Black',
     white_elo: '', black_elo: '',
@@ -926,8 +938,8 @@ function renderBoardArrows() {
     svg.appendChild(group);
   };
 
-  // Engine / Coach Best Move Arrow (when active & played move !== best move)
-  if (state.showBestMove && !state.isPreviewingBest) {
+  // Engine / Coach Best Move Arrow (hidden while actively retrying a mistake)
+  if (state.showBestMove && !state.isPreviewingBest && !(state.retry.active && !state.retry.solved)) {
     const bestUci = getBestMoveForCurrentPly();
     if (bestUci && bestUci.length >= 4) {
       drawSingleArrow(bestUci.slice(0, 2), bestUci.slice(2, 4), '#2E6F40', true);
@@ -1154,6 +1166,9 @@ function goToPly(ply) {
   if (state.explainDemo.active) {
     cancelExplainDemo();
   }
+  if (state.retry.active) {
+    exitRetryMode(true);
+  }
   if (state.subgame.active) {
     exitSubgame(true);
   }
@@ -1202,6 +1217,7 @@ function goToPly(ply) {
 
   syncPlayerBars(ply);
   updateBestMoveUI();
+  updateKeyMomentsUI();
   renderBoardArrows();
   updateEvalGraphCursor(ply);
   clearMoveSelection();
@@ -1544,7 +1560,471 @@ function renderReviewTab(movesData, summary = null) {
   });
 
   renderEvalGraph(movesData);
+  renderClockChart(movesData, state.gameReport);
   updateEvalGraphCursor(state.plyIndex);
+}
+
+// ── Time Spent Per Move Chart (Review Tab) ──────────────────
+function renderClockChart(movesData, report = null) {
+  const card = $('clock-chart-card');
+  const svg = $('clock-graph-svg');
+  const pillsEl = $('clock-pills-row');
+  const summaryEl = $('clock-graph-summary');
+  if (!card || !svg) return;
+
+  const series = (report?.clock_series && report.clock_series.length)
+    ? report.clock_series
+    : (movesData || [])
+        .filter(m => typeof m.time_spent === 'number')
+        .map(m => ({
+          ply: m.ply,
+          move_number: m.move_number,
+          color: m.color,
+          san: m.san,
+          time_spent: m.time_spent,
+          clock_seconds: m.clock_seconds,
+          classification: m.classification,
+        }));
+
+  if (!series.length) {
+    card.classList.add('hidden');
+    return;
+  }
+
+  card.classList.remove('hidden');
+  svg.innerHTML = '';
+  const W = 400;
+  const H = 84;
+  const padY = 6;
+  const maxSpend = Math.max(10, ...series.map(s => Number(s.time_spent || 0)));
+  const barW = Math.max(2, (W - 8) / series.length);
+  const ns = 'http://www.w3.org/2000/svg';
+
+  const colorFor = (s) => {
+    const c = (s.classification || '').toLowerCase();
+    if (c === 'blunder') return '#B71C1C';
+    if (c === 'miss' || c === 'mistake') return '#D9534F';
+    if (c === 'inaccuracy') return '#D9822B';
+    if (c === 'brilliant') return '#1B9AAA';
+    return s.color === 'white' ? '#C08552' : '#5A3B2B';
+  };
+
+  series.forEach((pt, idx) => {
+    const spent = Math.max(0.4, Number(pt.time_spent || 0));
+    const bh = Math.max(3, (spent / maxSpend) * (H - padY * 2));
+    const x = 4 + idx * barW;
+    const y = H - padY - bh;
+
+    const rect = document.createElementNS(ns, 'rect');
+    rect.setAttribute('x', x.toFixed(1));
+    rect.setAttribute('y', y.toFixed(1));
+    rect.setAttribute('width', Math.max(1.5, barW - 0.8).toFixed(1));
+    rect.setAttribute('height', bh.toFixed(1));
+    rect.setAttribute('fill', colorFor(pt));
+    rect.setAttribute('rx', '1');
+    rect.style.cursor = 'pointer';
+    rect.addEventListener('mouseenter', () => {
+      if (summaryEl) summaryEl.textContent = `Move ${pt.move_number} (${pt.san}): ${pt.time_spent}s`;
+    });
+    rect.addEventListener('click', () => goToPly(pt.ply));
+    svg.appendChild(rect);
+  });
+
+  if (summaryEl) summaryEl.textContent = `Peak ${Math.round(maxSpend)}s · Click bar`;
+  if (pillsEl) {
+    const side = state.reportSide || 'white';
+    const clk = report?.[side]?.clock;
+    if (clk && clk.has_clock_data) {
+      const pills = [
+        `<span class="clock-pill">Avg: ${clk.avg_time_spent}s/move</span>`,
+      ];
+      if (clk.rushed_blunders > 0) {
+        pills.push(`<span class="clock-pill clock-pill-warn">Rushed errors: ${clk.rushed_blunders}</span>`);
+      }
+      if (clk.time_trouble_blunders > 0) {
+        pills.push(`<span class="clock-pill clock-pill-danger">Low-clock errors: ${clk.time_trouble_blunders}</span>`);
+      }
+      if (clk.longest_think) {
+        pills.push(`<span class="clock-pill">Longest: ${clk.longest_think.san} (${clk.longest_think.seconds}s)</span>`);
+      }
+      pillsEl.innerHTML = pills.join('');
+    } else {
+      pillsEl.innerHTML = '';
+    }
+  }
+}
+
+// ── Guided Key Moments Walkthrough & Retry Mistake Mode ─────
+const KEY_MOMENT_CLASSES = new Set(['blunder', 'miss', 'mistake', 'brilliant', 'great']);
+
+function getKeyMomentPlies() {
+  return (state.moves || [])
+    .filter(m => KEY_MOMENT_CLASSES.has((m.classification || '').toLowerCase()))
+    .map(m => m.ply);
+}
+
+function updateKeyMomentsUI() {
+  const strip = $('key-moments-strip');
+  const counterEl = $('key-moment-counter');
+  const retryBtn = $('btn-retry-mistake');
+  const retryBanner = $('retry-banner');
+  if (!strip) return;
+
+  const keys = getKeyMomentPlies();
+  if (!keys.length) {
+    strip.classList.add('hidden');
+    return;
+  }
+
+  strip.classList.remove('hidden');
+  const idx = keys.indexOf(state.plyIndex);
+  const curMove = state.plyIndex > 0 ? state.moves[state.plyIndex - 1] : null;
+  if (counterEl) {
+    if (idx !== -1 && curMove) {
+      const lbl = curMove.classification.toUpperCase();
+      counterEl.textContent = `Key ${idx + 1}/${keys.length} · ${lbl}`;
+    } else {
+      counterEl.textContent = `${keys.length} Key Moment${keys.length === 1 ? '' : 's'}`;
+    }
+  }
+
+  const canRetry = Boolean(
+    curMove &&
+    ['blunder', 'miss', 'mistake'].includes((curMove.classification || '').toLowerCase()) &&
+    curMove.best_move &&
+    curMove.best_move !== curMove.uci
+  );
+  if (retryBtn) {
+    retryBtn.classList.toggle('hidden', !canRetry || state.retry.active);
+  }
+  if (retryBanner) {
+    retryBanner.classList.toggle('hidden', !state.retry.active);
+  }
+}
+
+function jumpKeyMoment(delta = 1) {
+  const keys = getKeyMomentPlies();
+  if (!keys.length) return;
+  let target;
+  if (delta > 0) {
+    target = keys.find(p => p > state.plyIndex) ?? keys[0];
+  } else {
+    const prevs = keys.filter(p => p < state.plyIndex);
+    target = prevs.length ? prevs[prevs.length - 1] : keys[keys.length - 1];
+  }
+  goToPly(target);
+}
+
+function startRetryMistake() {
+  if (state.plyIndex <= 0) return;
+  const m = state.moves[state.plyIndex - 1];
+  if (!m || !m.best_move || m.best_move === m.uci) return;
+
+  cancelExplainDemo();
+  exitSubgame(true);
+  clearAnnotations();
+  clearMoveSelection();
+
+  state.retry = {
+    active: true,
+    targetPly: state.plyIndex,
+    branchPly: state.plyIndex - 1,
+    bestMove: m.best_move,
+    bestMoveSan: m.best_move_san || m.best_move,
+    playedSan: m.san,
+    triesLeft: 2,
+    solved: false,
+    prevShowBest: state.showBestMove,
+  };
+  state.showBestMove = false;
+  state.isPreviewingBest = false;
+
+  const preGame = buildGameAtPly(state.retry.branchPly);
+  state.board.position(preGame.fen(), true);
+  highlightLastMove(null, null, null);
+  renderBoardArrows();
+  updateKeyMomentsUI();
+
+  const statusEl = $('retry-status');
+  if (statusEl) {
+    statusEl.textContent = `Move ${m.move_number}: Find a better move than ${m.san} (2 tries left)`;
+  }
+  window.BlunderlessChesterArt?.say(
+    `Retry Move ${m.move_number}! Instead of ${m.san}, tap or drag a stronger move on the board.`,
+    'suspicious'
+  );
+}
+
+function handleRetryAttempt(fromSq, toSq) {
+  if (!state.retry.active || state.retry.solved) return false;
+  const g = buildGameAtPly(state.retry.branchPly);
+  const mv = g.move({ from: fromSq, to: toSq, promotion: 'q' });
+  if (!mv) return false;
+
+  const uci = mv.from + mv.to + (mv.promotion || '');
+  const best = state.retry.bestMove || '';
+  const isExact = uci === best || uci.slice(0, 4) === best.slice(0, 4);
+  const statusEl = $('retry-status');
+
+  if (isExact) {
+    state.retry.solved = true;
+    state.board.position(g.fen(), true);
+    highlightLastMove(mv.from, mv.to, 'best');
+    playMoveSound({ san: mv.san }, g);
+    if (statusEl) statusEl.textContent = `Spot on! ${mv.san} is Stockfish's best move!`;
+    window.BlunderlessChesterArt?.say(
+      `Nailed it! ${mv.san} was the best move—much cleaner than ${state.retry.playedSan}!`,
+      'smug'
+    );
+    state.showBestMove = true;
+    renderBoardArrows();
+    return true;
+  }
+
+  state.retry.triesLeft -= 1;
+  sounds.reverse();
+  if (state.retry.triesLeft > 0) {
+    if (statusEl) {
+      statusEl.textContent = `Not ${mv.san} — try again (${state.retry.triesLeft} try left)`;
+    }
+    window.BlunderlessChesterArt?.say(
+      `Not quite with ${mv.san}. Scan checks, captures, and undefended pieces—1 try left!`,
+      'annoyed'
+    );
+    state.board.position(buildGameAtPly(state.retry.branchPly).fen(), true);
+  } else {
+    revealRetryAnswer();
+  }
+  return true;
+}
+
+function revealRetryAnswer() {
+  if (!state.retry.active) return;
+  const best = state.retry.bestMove;
+  const bestSan = state.retry.bestMoveSan;
+  state.retry.solved = true;
+  state.showBestMove = true;
+
+  if (best && best.length >= 4) {
+    const g = buildGameAtPly(state.retry.branchPly);
+    const mv = g.move({ from: best.slice(0, 2), to: best.slice(2, 4), promotion: best.slice(4, 5) || 'q' });
+    if (mv) {
+      state.board.position(g.fen(), true);
+      highlightLastMove(mv.from, mv.to, 'best');
+      playMoveSound({ san: mv.san }, g);
+    }
+  }
+  const statusEl = $('retry-status');
+  if (statusEl) statusEl.textContent = `Best move was ${bestSan}. Click [EXPLAIN] to see why!`;
+  window.BlunderlessChesterArt?.say(
+    `The best move was ${bestSan} instead of ${state.retry.playedSan}. Hit [EXPLAIN] to see the full breakdown!`,
+    'deadpan'
+  );
+  renderBoardArrows();
+}
+
+function exitRetryMode(skipGoToPly = false) {
+  if (!state.retry.active) return;
+  const targetPly = state.retry.targetPly;
+  const restoreBest = state.retry.prevShowBest;
+  state.retry.active = false;
+  state.retry.solved = false;
+  state.showBestMove = restoreBest;
+  updateKeyMomentsUI();
+  if (!skipGoToPly) {
+    goToPly(targetPly);
+  }
+}
+
+// ── Shareable Discord Review Card (PNG) & Annotated PGN ─────
+async function generateReviewCardPng() {
+  if (!state.moves || !state.moves.length) return;
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  const canvas = document.createElement('canvas');
+  canvas.width = 960;
+  canvas.height = 540;
+  const ctx = canvas.getContext('2d');
+
+  // Background & Editorial Frame
+  ctx.fillStyle = isDark ? '#17110D' : '#FAF6F0';
+  ctx.fillRect(0, 0, 960, 540);
+  ctx.strokeStyle = isDark ? '#F1E6D8' : '#2B1A12';
+  ctx.lineWidth = 4;
+  ctx.strokeRect(18, 18, 924, 504);
+
+  const ink = isDark ? '#F1E6D8' : '#2B1A12';
+  const muted = isDark ? '#BBA38F' : '#8C5A3C';
+  const cardBg = isDark ? '#221A14' : '#FFFDF9';
+  const accent = '#C86D3B';
+
+  // Header
+  ctx.fillStyle = accent;
+  ctx.font = 'bold 20px monospace';
+  ctx.fillText('BLUNDERLESS · STOCKFISH GAME REVIEW', 44, 62);
+  ctx.fillStyle = muted;
+  ctx.font = '15px monospace';
+  const openingStr = `${state.headers.eco ? state.headers.eco + ' · ' : ''}${state.lastKnownOpening || 'Chess Game'}`;
+  ctx.fillText(openingStr.slice(0, 68), 44, 88);
+
+  const resultTxt = state.headers.result || '*';
+  ctx.fillStyle = ink;
+  ctx.font = 'bold 24px monospace';
+  ctx.textAlign = 'right';
+  ctx.fillText(resultTxt, 916, 66);
+  ctx.textAlign = 'left';
+
+  // Player Accuracy Boxes
+  const acc = calculateAccuracy(state.moves);
+  const wAcc = state.summary?.white_accuracy ?? acc.white ?? '—';
+  const bAcc = state.summary?.black_accuracy ?? acc.black ?? '—';
+  const wRat = state.summary?.white_game_rating ?? '—';
+  const bRat = state.summary?.black_game_rating ?? '—';
+  const cnts = { white: { brilliant: 0, blunder: 0, mistake: 0 }, black: { brilliant: 0, blunder: 0, mistake: 0 } };
+  for (const m of state.moves) {
+    if (cnts[m.color] && cnts[m.color][m.classification] !== undefined) cnts[m.color][m.classification]++;
+  }
+
+  const drawPlayerBox = (x, label, name, elo, accuracy, rating, c) => {
+    ctx.fillStyle = cardBg;
+    ctx.fillRect(x, 110, 424, 152);
+    ctx.strokeStyle = isDark ? 'rgba(241,230,216,0.28)' : 'rgba(43,26,18,0.28)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x, 110, 424, 152);
+
+    ctx.fillStyle = muted;
+    ctx.font = 'bold 13px monospace';
+    ctx.fillText(label, x + 18, 136);
+    ctx.fillStyle = ink;
+    ctx.font = 'bold 22px monospace';
+    ctx.fillText(`${(name || label).slice(0, 18)}${elo ? ' (' + elo + ')' : ''}`, x + 18, 166);
+    ctx.fillStyle = accent;
+    ctx.font = 'bold 34px monospace';
+    ctx.fillText(`${accuracy}%`, x + 18, 212);
+    ctx.fillStyle = muted;
+    ctx.font = '14px monospace';
+    ctx.fillText(`Est. Rating: ${rating}`, x + 168, 206);
+    ctx.fillStyle = ink;
+    ctx.font = '14px monospace';
+    ctx.fillText(`!! ${c.brilliant}   ? ${c.mistake}   ?? ${c.blunder}`, x + 18, 244);
+  };
+
+  drawPlayerBox(44, 'WHITE', state.headers.white, state.headers.white_elo, wAcc, wRat, cnts.white);
+  drawPlayerBox(492, 'BLACK', state.headers.black, state.headers.black_elo, bAcc, bRat, cnts.black);
+
+  // Mini Evaluation Graph
+  const gx = 44, gy = 286, gw = 872, gh = 112;
+  ctx.fillStyle = isDark ? '#140D09' : '#2B1A12';
+  ctx.fillRect(gx, gy, gw, gh);
+  const pts = [scoreToGraphRatio(state.initialEval), ...state.moves.map(m => scoreToGraphRatio(m.eval_after))];
+  const stepX = gw / Math.max(1, pts.length - 1);
+  ctx.beginPath();
+  ctx.moveTo(gx, gy + gh);
+  pts.forEach((r, i) => {
+    const px = gx + i * stepX;
+    const py = gy + (1 - r) * gh;
+    ctx.lineTo(px, py);
+  });
+  ctx.lineTo(gx + gw, gy + gh);
+  ctx.closePath();
+  ctx.fillStyle = '#FAF6F0';
+  ctx.fill();
+
+  ctx.strokeStyle = 'rgba(200,109,59,0.65)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(gx, gy + gh / 2);
+  ctx.lineTo(gx + gw, gy + gh / 2);
+  ctx.stroke();
+
+  // Chester Summary Footer
+  const side = state.reportSide || 'white';
+  const rawQuote = state.gameReport?.[side]?.overall_summary || `Analysed ${state.moves.length} half-moves with Stockfish.`;
+  ctx.fillStyle = ink;
+  ctx.font = '15px monospace';
+  const words = (`Chester: "${rawQuote}"`).split(/\s+/);
+  let line = '';
+  let ty = 432;
+  for (const w of words) {
+    if ((line + ' ' + w).length > 82) {
+      ctx.fillText(line.trim(), 44, ty);
+      line = w;
+      ty += 22;
+      if (ty > 492) break;
+    } else {
+      line += ' ' + w;
+    }
+  }
+  if (line.trim() && ty <= 496) ctx.fillText(line.trim(), 44, ty);
+
+  const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+  if (!blob) return;
+  const filename = `blunderless-${(state.headers.white || 'white').replace(/\W+/g, '')}-vs-${(state.headers.black || 'black').replace(/\W+/g, '')}.png`;
+
+  if (navigator.canShare && typeof File !== 'undefined') {
+    const file = new File([blob], filename, { type: 'image/png' });
+    if (navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({ title: 'Blunderless Game Review', files: [file] });
+        return;
+      } catch (_) {}
+    }
+  }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
+function exportAnnotatedPgn() {
+  if (!state.moves || !state.moves.length) return;
+  const h = state.headers || {};
+  const lines = [
+    `[Event "${h.event || 'Blunderless Review'}"]`,
+    `[Site "${h.site || 'Blunderless'}"]`,
+    `[Date "${h.date || '????.??.??'}"]`,
+    `[White "${h.white || 'White'}"]`,
+    `[Black "${h.black || 'Black'}"]`,
+    `[Result "${h.result || '*'}"]`,
+  ];
+  if (h.eco) lines.push(`[ECO "${h.eco}"]`);
+  if (state.lastKnownOpening) lines.push(`[Opening "${state.lastKnownOpening}"]`);
+  lines.push('');
+
+  const glyphs = {
+    brilliant: '!!', great: '!', inaccuracy: '?!', mistake: '?', miss: '?', blunder: '??',
+  };
+  const fmtEv = (sc) => {
+    if (!sc) return '0.00';
+    if (sc.type === 'mate') return `#${sc.value}`;
+    return `${(sc.value / 100).toFixed(2)}`;
+  };
+
+  const tokens = [];
+  for (const m of state.moves) {
+    if (m.color === 'white') tokens.push(`${m.move_number}.`);
+    const g = glyphs[m.classification] || '';
+    const notes = [`[%eval ${fmtEv(m.eval_after)}]`];
+    if (['blunder', 'miss', 'mistake'].includes(m.classification) && m.best_move_san && m.best_move_san !== m.san) {
+      notes.push(`Best was ${m.best_move_san}`);
+    }
+    tokens.push(`${m.san}${g} { ${notes.join(' ')} }`);
+  }
+  tokens.push(h.result || '*');
+  lines.push(tokens.join(' '));
+
+  const blob = new Blob([lines.join('\n')], { type: 'application/x-chess-pgn;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `blunderless-annotated.pgn`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 
 function renderGameReport(report, side = 'white') {
@@ -1851,15 +2331,83 @@ async function analyseFen(fen, seq = _analysisLoadSeq, signal = null) {
   switchTab('moves');
 }
 
+function getPreferredDepth() {
+  try {
+    const n = parseInt(localStorage.getItem('blunderless_depth') || '10', 10);
+    return Number.isFinite(n) && n >= 6 && n <= 18 ? n : 10;
+  } catch (_) {
+    return 10;
+  }
+}
+
+async function fetchPgnStream(pgn, depth, seq, signal = null) {
+  const resp = await fetch('/api/analyse-pgn/stream', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pgn, depth }),
+    signal,
+  });
+  if (!resp.ok || !resp.body) {
+    return fetchApi('/api/analyse-pgn', 'POST', { pgn, depth }, signal);
+  }
+
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let finalResult = null;
+  let streamError = null;
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    let sepIdx;
+    while ((sepIdx = buffer.indexOf('\n\n')) !== -1) {
+      const frame = buffer.slice(0, sepIdx);
+      buffer = buffer.slice(sepIdx + 2);
+      let evName = 'message';
+      let dataStr = '';
+      for (const ln of frame.split('\n')) {
+        if (ln.startsWith('event:')) evName = ln.slice(6).trim();
+        else if (ln.startsWith('data:')) dataStr += ln.slice(5).trim();
+      }
+      if (!dataStr) continue;
+      let parsed;
+      try { parsed = JSON.parse(dataStr); } catch (_) { continue; }
+
+      if (evName === 'progress') {
+        const p = parsed.ply ?? 0;
+        const tot = parsed.total ?? 0;
+        const pct = parsed.pct ?? 0;
+        const lbl = tot > 0 ? `Analysing ${p}/${tot} (${pct}%)...` : 'Analysing with Stockfish...';
+        setBoardLoading(true, lbl, seq);
+        setStatus(`<span class="spinner"></span> ${lbl}`);
+      } else if (evName === 'done') {
+        finalResult = parsed;
+      } else if (evName === 'error') {
+        streamError = parsed.detail || 'Analysis stream error';
+      }
+    }
+  }
+
+  if (streamError) throw new Error(streamError);
+  if (finalResult) return finalResult;
+  return fetchApi('/api/analyse-pgn', 'POST', { pgn, depth }, signal);
+}
+
 async function analysePgn(pgn, cachedResult = null, targetPly = 0, userHandleOverride = null, seq = _analysisLoadSeq, signal = null) {
-  const res = cachedResult || await fetchApi('/api/analyse-pgn', 'POST', { pgn, depth: 10 }, signal);
+  const depth = getPreferredDepth();
+  const res = cachedResult || await fetchPgnStream(pgn, depth, seq, signal);
   if (seq !== _analysisLoadSeq) return;
 
   cancelExplainDemo();
+  exitRetryMode(true);
   exitSubgame(true);
   clearAnnotations();
   clearMoveSelection();
   state.isPreviewingBest = false;
+  state.summary = res.summary || null;
 
   if (userHandleOverride) {
     state.searchedUser = userHandleOverride.trim().toLowerCase();
@@ -1906,6 +2454,7 @@ async function analysePgn(pgn, cachedResult = null, targetPly = 0, userHandleOve
   // Render Coach's Game Report defaulting to the user's own side
   state.gameReport = res.report || null;
   renderGameReport(state.gameReport, shouldFlip ? 'black' : 'white');
+  renderClockChart(res.moves, state.gameReport);
 
   const jumpPly = Math.max(0, Math.min(targetPly || 0, res.moves.length));
   goToPly(jumpPly);
@@ -2230,6 +2779,9 @@ function clearMoveSelection() {
 }
 
 function getActiveChessInstance() {
+  if (state.retry.active && !state.retry.solved) {
+    return buildGameAtPly(state.retry.branchPly);
+  }
   if (state.subgame.active && state.subgame.game) {
     return state.subgame.game;
   }
@@ -2311,6 +2863,10 @@ function handleSquareTap(sq) {
     if (legalMatch) {
       const fromSq = _selectedSquare;
       clearMoveSelection();
+      if (state.retry.active && !state.retry.solved) {
+        handleRetryAttempt(fromSq, sq);
+        return;
+      }
       if (state.subgame.active) {
         const moveObj = state.subgame.game.move({ from: fromSq, to: sq, promotion: 'q' });
         if (moveObj) handleSubgameMove(moveObj, true);
@@ -2397,6 +2953,14 @@ function onSubgameDrop(source, target) {
 
   clearMoveSelection();
 
+  if (state.retry.active && !state.retry.solved) {
+    const testRetry = buildGameAtPly(state.retry.branchPly);
+    const mv = testRetry.move({ from: source, to: target, promotion: 'q' });
+    if (!mv) return 'snapback';
+    _pendingDropMove = { from: source, to: target, isRetry: true };
+    return;
+  }
+
   if (state.subgame.active && state.subgame.game) {
     const moveObj = state.subgame.game.move({ from: source, to: target, promotion: 'q' });
     if (!moveObj) return 'snapback';
@@ -2416,7 +2980,9 @@ function onSubgameSnapEnd() {
     const pending = _pendingDropMove;
     _pendingDropMove = null;
     clearAnnotations();
-    if (pending.isNewSubgame) {
+    if (pending.isRetry) {
+      handleRetryAttempt(pending.from, pending.to);
+    } else if (pending.isNewSubgame) {
       enterSubgameWithMove(pending.from, pending.to, state.plyIndex);
     } else if (state.subgame.active && state.subgame.game) {
       handleSubgameMove(pending.moveObj, true);
@@ -2735,8 +3301,7 @@ function updateCoachContext(fen, ply, moveData) {
 
   const meanEpl = userMovesSeen > 0 ? Number((userEplSum / userMovesSeen).toFixed(4)) : 0;
 
-  // Dynamic personality tone: starts instructive, rewards good play with analytical respect,
-  // escalates to sarcastic/cocky as game intensifies or mistakes pile up
+  // Dynamic personality tone (respecting explicit override in Settings)
   let tone = 'instructive';
   if (checkLimit <= 8 && totalBlunders === 0) {
     tone = 'instructive';
@@ -2745,6 +3310,10 @@ function updateCoachContext(fen, ply, moveData) {
   } else if (checkLimit >= 14 || gameIntensity >= 2 || totalBlunders >= 2) {
     tone = 'sarcastic';
   }
+  try {
+    const prefTone = localStorage.getItem('blunderless_tone');
+    if (prefTone && prefTone !== 'auto') tone = prefTone;
+  } catch (_) {}
 
   const evalFlip =
     epBefore !== null &&
@@ -2948,13 +3517,22 @@ document.addEventListener('DOMContentLoaded', () => {
   $('btn-rail-coords').addEventListener('click', toggleCoordinates);
   $('btn-rail-best').addEventListener('click', toggleBestMove);
 
-  // Best Move & Subgame Sidebar Controls
+  // Best Move, Subgame, Key Moments & Retry Controls
   $('btn-show-best').addEventListener('click', toggleBestMove);
   $('btn-preview-best').addEventListener('click', previewBestMove);
   $('btn-play-best').addEventListener('click', startBestMoveSubgame);
   $('btn-subgame-undo').addEventListener('click', undoSubgameMove);
   $('btn-subgame-step').addEventListener('click', stepSubgameBestMove);
   $('btn-subgame-exit').addEventListener('click', () => exitSubgame(false));
+  $('btn-key-prev')?.addEventListener('click', () => jumpKeyMoment(-1));
+  $('btn-key-next')?.addEventListener('click', () => jumpKeyMoment(1));
+  $('btn-retry-mistake')?.addEventListener('click', startRetryMistake);
+  $('btn-retry-reveal')?.addEventListener('click', revealRetryAnswer);
+  $('btn-retry-exit')?.addEventListener('click', () => exitRetryMode(false));
+
+  // Share Card (PNG) & Export Annotated PGN
+  $('btn-share-card')?.addEventListener('click', generateReviewCardPng);
+  $('btn-export-pgn')?.addEventListener('click', exportAnnotatedPgn);
 
   // Return to last book move button
   $('btn-return-book').addEventListener('click', () => {
@@ -2967,10 +3545,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Coach Game Report White/Black Perspective Toggle
   $('report-btn-white')?.addEventListener('click', () => {
-    if (state.gameReport) renderGameReport(state.gameReport, 'white');
+    if (state.gameReport) {
+      renderGameReport(state.gameReport, 'white');
+      renderClockChart(state.moves, state.gameReport);
+    }
   });
   $('report-btn-black')?.addEventListener('click', () => {
-    if (state.gameReport) renderGameReport(state.gameReport, 'black');
+    if (state.gameReport) {
+      renderGameReport(state.gameReport, 'black');
+      renderClockChart(state.moves, state.gameReport);
+    }
   });
 
   // Engine Lines Collapse Toggle
@@ -3035,7 +3619,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     switch (e.key) {
       case 'Escape':
-        if (state.subgame.active) {
+        if (state.retry.active) {
+          e.preventDefault();
+          exitRetryMode(false);
+        } else if (state.subgame.active) {
           e.preventDefault();
           exitSubgame(false);
         }

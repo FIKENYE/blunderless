@@ -204,7 +204,90 @@ def _compare_played_vs_best(
                 oh = opp_hang_best[0]
                 why_best_better.append(f"immediately targets their undefended {oh['piece']} on {oh['square']}")
 
-    # ── 3. King Safety & Castling ──
+        # Skewers created or allowed
+        sk_before_opp = len(feat_before["tactical_threats"][o_key].get("skewered_pieces", []))
+        sk_p_opp = feat_played["tactical_threats"][o_key].get("skewered_pieces", [])
+        if len(sk_p_opp) > sk_before_opp:
+            sk = sk_p_opp[0]
+            played_strengths.append(
+                f"skewers their {sk['front_piece']} on {sk['front_square']} against the {sk['back_piece']} on {sk['back_square']}"
+            )
+        if feat_best:
+            sk_best_opp = feat_best["tactical_threats"][o_key].get("skewered_pieces", [])
+            if len(sk_best_opp) > len(sk_p_opp):
+                sk = sk_best_opp[0]
+                why_best_better.append(
+                    f"skewers their {sk['front_piece']} on {sk['front_square']} to win the {sk['back_piece']} on {sk['back_square']}"
+                )
+            sk_p_me = feat_played["tactical_threats"][m_key].get("skewered_pieces", [])
+            sk_best_me = feat_best["tactical_threats"][m_key].get("skewered_pieces", [])
+            if len(sk_p_me) > len(sk_best_me):
+                sk = sk_p_me[0]
+                why_played_hurts.append(
+                    f"walks into a skewer against your {sk['front_piece']} on {sk['front_square']} and {sk['back_piece']} on {sk['back_square']}"
+                )
+
+        # Discovered attacks / checks
+        da_before_opp = len(feat_before["tactical_threats"][o_key].get("discovered_attacks", []))
+        da_p_opp = feat_played["tactical_threats"][o_key].get("discovered_attacks", [])
+        if len(da_p_opp) > da_before_opp:
+            da = da_p_opp[0]
+            kind = "discovered check" if da.get("is_check") else f"discovered attack on their {da['target_piece']} on {da['target_square']}"
+            played_strengths.append(f"sets up a {kind} with your {da['slider_piece']} on {da['slider_square']}")
+        if feat_best:
+            da_best_opp = feat_best["tactical_threats"][o_key].get("discovered_attacks", [])
+            if len(da_best_opp) > len(da_p_opp):
+                da = da_best_opp[0]
+                kind = "discovered check" if da.get("is_check") else f"discovered attack on their {da['target_piece']} on {da['target_square']}"
+                why_best_better.append(f"sets up a {kind} behind your {da['blocker_piece']} on {da['blocker_square']}")
+            da_p_me = feat_played["tactical_threats"][m_key].get("discovered_attacks", [])
+            da_best_me = feat_best["tactical_threats"][m_key].get("discovered_attacks", [])
+            if len(da_p_me) > len(da_best_me):
+                da = da_p_me[0]
+                why_played_hurts.append(
+                    f"allows a discovered attack from their {da['slider_piece']} on {da['slider_square']} against your {da['target_piece']} on {da['target_square']}"
+                )
+
+        # Overloaded defenders
+        if feat_best:
+            ov_p_me = feat_played["tactical_threats"][m_key].get("overloaded_defenders", [])
+            ov_best_me = feat_best["tactical_threats"][m_key].get("overloaded_defenders", [])
+            if len(ov_p_me) > len(ov_best_me):
+                ov = ov_p_me[0]
+                why_played_hurts.append(
+                    f"overloads your {ov['piece']} on {ov['square']} defending {' and '.join(ov['defending'][:2])}"
+                )
+            ov_p_opp = feat_played["tactical_threats"][o_key].get("overloaded_defenders", [])
+            ov_best_opp = feat_best["tactical_threats"][o_key].get("overloaded_defenders", [])
+            if len(ov_best_opp) > len(ov_p_opp):
+                ov = ov_best_opp[0]
+                why_best_better.append(
+                    f"overloads their {ov['piece']} on {ov['square']} trying to guard {' and '.join(ov['defending'][:2])}"
+                )
+
+    # ── 3. King Safety, Back Rank & Castling ──
+    if feat_played and feat_best:
+        br_p = feat_played["king_safety"][m_key].get("back_rank_weak", False)
+        br_best = feat_best["king_safety"][m_key].get("back_rank_weak", False)
+        if br_p and not br_best:
+            why_played_hurts.append("leaves your king trapped with a vulnerable back rank")
+            why_best_better.append("creates breathing room (luft) and solves your back-rank weakness")
+
+        # Rooks on open files / 7th rank
+        pa_p = feat_played["piece_activity"][m_key]
+        pa_best = feat_best["piece_activity"][m_key]
+        if len(pa_best.get("rooks_on_seventh", [])) > len(pa_p.get("rooks_on_seventh", [])):
+            why_best_better.append("invades the 7th rank with your rook to pressure enemy pawns and king")
+        elif len(pa_best.get("rooks_on_open_files", [])) > len(pa_p.get("rooks_on_open_files", [])):
+            why_best_better.append("claims an open file with your rook")
+
+    if feat_played:
+        pa_before = feat_before["piece_activity"][m_key]
+        pa_p = feat_played["piece_activity"][m_key]
+        if len(pa_p.get("rooks_on_seventh", [])) > len(pa_before.get("rooks_on_seventh", [])):
+            played_strengths.append("plants a rook aggressively on the 7th rank")
+        elif len(pa_p.get("rooks_on_open_files", [])) > len(pa_before.get("rooks_on_open_files", [])):
+            played_strengths.append("activates a rook onto an open file")
     if best_move and board_before.is_castling(best_move) and not (played_move and board_before.is_castling(played_move)):
         why_best_better.append("castles your king out of the center and activates your rook")
     if played_move and board_before.is_castling(played_move):
@@ -439,9 +522,10 @@ def _try_gemini_explain(facts: dict[str, Any], tone: str = "instructive") -> Opt
         f"VERIFIED FACTS:\n{json.dumps(facts)}"
     )
 
+    model = os.environ.get("GEMINI_MODEL", "gemini-3.8-flash").strip() or "gemini-3.8-flash"
     url = (
         "https://generativelanguage.googleapis.com/v1beta/models/"
-        f"gemini-2.0-flash:generateContent?key={api_key}"
+        f"{model}:generateContent?key={api_key}"
     )
     body = json.dumps({
         "contents": [{"parts": [{"text": prompt}]}],

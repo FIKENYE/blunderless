@@ -26,7 +26,9 @@ cloudflared tunnel --url http://127.0.0.1:8000
 Copy the `https://....trycloudflare.com` link it prints and paste it in Discord. *(Note: the link stays live while both windows remain open.)*
 
 ## Environment Variables (Optional)
+- `DATABASE_URL` — PostgreSQL connection URL (e.g., free Neon, Supabase, or Render Postgres) for persistent cloud user accounts, cross-device login, synced games, cached analyses, and settings. Falls back automatically to local SQLite (`data/blunderless.db`) when unset.
 - `STOCKFISH_PATH` — custom path to Stockfish binary (auto-detected on Windows & Linux).
-- `BLUNDERLESS_DB_PATH` — custom SQLite path (defaults to `data/blunderless.db`).
+- `BLUNDERLESS_DB_PATH` — custom SQLite path when not using `DATABASE_URL` (defaults to `data/blunderless.db`).
 - `GEMINI_API_KEY` — optional Gemini API key for LLM-phrased Chester explanations (falls back to grounded comparative explanations without it).
-- `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` — optional Google OAuth login (automatically hidden when unset so testers can sign in seamlessly via Chess.com / Lichess or a quick profile).
+- `GEMINI_MODEL` — optional Gemini model override (defaults to `gemini-3.8-flash`).
+- `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` — optional Google OAuth login (automatically hidden when unset so testers can sign in via Email/Password account, Chess.com / Lichess, or a quick profile).

@@ -11,8 +11,11 @@ Supports:
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 import os
+import re
 import secrets
 import time
 import urllib.error
@@ -22,10 +25,14 @@ from pathlib import Path
 from typing import Any, Optional
 
 from src.db import (
+    DB_PATH,
+    create_password_user,
     create_session,
     delete_session,
     get_or_create_local_user,
     get_user_by_session,
+    get_user_for_password_login,
+    sanitize_user_row,
     upsert_google_user,
 )
 
@@ -212,16 +219,114 @@ def verify_and_exchange_google_code(
     return user, session_token
 
 
-def login_local_profile(display_name: str) -> tuple[dict[str, Any], str]:
-    """Create or resume a local Blunderless profile and issue a session token."""
-    user = get_or_create_local_user(display_name)
-    token = create_session(user["id"])
+_USERNAME_RE = re.compile(r"^[a-zA-Z0-9_.-]{3,32}$")
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def hash_password(password: str) -> str:
+    """Hash a password with stdlib scrypt + random 16-byte salt (no extra dependencies)."""
+    if not password or len(password) < 6:
+        raise ValueError("Password must be at least 6 characters long.")
+    if len(password) > 128:
+        raise ValueError("Password must be 128 characters or fewer.")
+    salt = secrets.token_bytes(16)
+    n, r, p = 16384, 8, 1
+    dk = hashlib.scrypt(password.encode("utf-8"), salt=salt, n=n, r=r, p=p, dklen=32)
+    return f"scrypt${n}${r}${p}${salt.hex()}${dk.hex()}"
+
+
+def verify_password(password: str, stored_hash: str) -> bool:
+    """Verify a password against a stored scrypt hash using constant-time comparison."""
+    if not password or not stored_hash:
+        return False
+    try:
+        algo, n_s, r_s, p_s, salt_hex, dk_hex = stored_hash.split("$", 5)
+        if algo != "scrypt":
+            return False
+        salt = bytes.fromhex(salt_hex)
+        expected = bytes.fromhex(dk_hex)
+        actual = hashlib.scrypt(
+            password.encode("utf-8"),
+            salt=salt,
+            n=int(n_s),
+            r=int(r_s),
+            p=int(p_s),
+            dklen=len(expected),
+        )
+        return hmac.compare_digest(actual, expected)
+    except Exception:
+        return False
+
+
+def register_password_account(
+    identifier: str,
+    password: str,
+    display_name: str = "",
+    db_path: Path = DB_PATH,
+) -> tuple[dict[str, Any], str]:
+    """
+    Create a cross-device Blunderless account using an email or username + password.
+    Returns `(user_dict, session_token)`.
+    """
+    ident = (identifier or "").strip()
+    if not ident:
+        raise ValueError("Please enter an email address or username.")
+
+    email: Optional[str] = None
+    username: Optional[str] = None
+    if "@" in ident:
+        if not _EMAIL_RE.match(ident):
+            raise ValueError("Please enter a valid email address.")
+        email = ident.lower()
+    else:
+        if not _USERNAME_RE.match(ident):
+            raise ValueError("Username must be 3–32 characters (letters, numbers, _, ., -).")
+        username = ident.lower()
+
+    pw_hash = hash_password(password)
+    clean_display = (display_name or "").strip() or (username or email.split("@")[0])  # type: ignore[union-attr]
+    user = create_password_user(
+        username=username,
+        email=email,
+        display_name=clean_display,
+        password_hash=pw_hash,
+        db_path=db_path,
+    )
+    token = create_session(user["id"], db_path=db_path)
     return user, token
 
 
-def resolve_user(cookie_token: Optional[str]) -> Optional[dict[str, Any]]:
-    return get_user_by_session(cookie_token)
+def login_password_account(
+    identifier: str,
+    password: str,
+    db_path: Path = DB_PATH,
+) -> tuple[dict[str, Any], str]:
+    """Authenticate an existing email/username + password account and issue a 30-day session."""
+    ident = (identifier or "").strip()
+    if not ident or not password:
+        raise ValueError("Please enter your email/username and password.")
+
+    raw_user = get_user_for_password_login(ident, db_path=db_path)
+    if not raw_user or not raw_user.get("password_hash"):
+        raise ValueError("Invalid email/username or password.")
+    if not verify_password(password, str(raw_user["password_hash"])):
+        raise ValueError("Invalid email/username or password.")
+
+    safe_user = sanitize_user_row(raw_user)
+    token = create_session(safe_user["id"], db_path=db_path)  # type: ignore[index]
+    return safe_user, token  # type: ignore[return-value]
 
 
-def logout_session(cookie_token: Optional[str]) -> None:
-    delete_session(cookie_token)
+def login_local_profile(display_name: str, db_path: Path = DB_PATH) -> tuple[dict[str, Any], str]:
+    """Create or resume a local Blunderless profile and issue a session token."""
+    user = get_or_create_local_user(display_name, db_path=db_path)
+    token = create_session(user["id"], db_path=db_path)
+    return user, token
+
+
+def resolve_user(cookie_token: Optional[str], db_path: Path = DB_PATH) -> Optional[dict[str, Any]]:
+    return get_user_by_session(cookie_token, db_path=db_path)
+
+
+def logout_session(cookie_token: Optional[str], db_path: Path = DB_PATH) -> None:
+    delete_session(cookie_token, db_path=db_path)

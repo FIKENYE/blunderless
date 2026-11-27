@@ -14,15 +14,16 @@ import json
 import math
 import os
 from pathlib import Path
+import queue
 import threading
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 import urllib.parse
 import urllib.request
 
 import chess
 import chess.pgn
 from fastapi import FastAPI, HTTPException, Query, Request, Response
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -33,7 +34,9 @@ from src.auth import (
     get_google_config,
     is_google_configured,
     login_local_profile,
+    login_password_account,
     logout_session,
+    register_password_account,
     resolve_user,
     verify_and_exchange_google_code,
 )
@@ -51,10 +54,13 @@ from src.db import (
     get_game_by_id,
     get_linked_accounts,
     get_saved_report,
+    get_storage_mode,
+    get_user_preferences,
     init_db,
     list_saved_reports,
     query_games,
     save_game_analysis,
+    update_user_preferences,
     upsert_games,
     upsert_linked_account,
 )
@@ -95,6 +101,25 @@ class PgnRequest(BaseModel):
 
 class LocalLoginRequest(BaseModel):
     display_name: str = Field(..., min_length=1, max_length=48)
+
+
+class RegisterAccountRequest(BaseModel):
+    identifier: str = Field(..., min_length=3, max_length=120)
+    password: str = Field(..., min_length=6, max_length=128)
+    display_name: Optional[str] = Field(default="", max_length=48)
+
+
+class LoginAccountRequest(BaseModel):
+    identifier: str = Field(..., min_length=1, max_length=120)
+    password: str = Field(..., min_length=1, max_length=128)
+
+
+class PreferencesPatchRequest(BaseModel):
+    theme: Optional[str] = Field(default=None, pattern="^(light|dark)$")
+    sound: Optional[bool] = None
+    coords: Optional[bool] = None
+    tone: Optional[str] = Field(default=None, pattern="^(instructive|analytical|sarcastic)$")
+    depth: Optional[int] = Field(default=None, ge=6, le=18)
 
 
 class LinkAccountRequest(BaseModel):
@@ -396,6 +421,7 @@ def parse_and_analyse_pgn(
     depth: int = 10,
     engine: Optional[Any] = None,
     cancel_event: Optional[threading.Event] = None,
+    progress_cb: Optional[Callable[[int, int, str], None]] = None,
 ) -> dict[str, Any]:
     """
     Parse a PGN string and evaluate each move sequentially, extracting
@@ -410,7 +436,11 @@ def parse_and_analyse_pgn(
 
     cache_key = (hashlib.sha256(pgn_text.strip().encode("utf-8")).hexdigest(), depth)
     if cache_key in _PGN_CACHE:
-        return _PGN_CACHE[cache_key]
+        cached_res = _PGN_CACHE[cache_key]
+        if progress_cb is not None:
+            total = len(cached_res.get("moves") or [])
+            progress_cb(total, total, "")
+        return cached_res
 
     game = chess.pgn.read_game(io.StringIO(pgn_text))
     if game is None:
@@ -420,12 +450,15 @@ def parse_and_analyse_pgn(
     if not nodes:
         raise ValueError("PGN contains no moves.")
 
+    total_plies = len(nodes)
     reset_engine_hash(engine)
 
     board = game.board()
     initial_fen = board.fen()
     if cancel_event is not None and cancel_event.is_set():
         raise InterruptedError("Analysis cancelled.")
+    if progress_cb is not None:
+        progress_cb(0, total_plies, "")
     prev_info = analyse_position(initial_fen, depth=depth, multipv=2, engine=engine)
     initial_eval = prev_info["score"]
     initial_top_lines = [
@@ -489,6 +522,8 @@ def parse_and_analyse_pgn(
         )
         prev_info = after_info
         prev_move = move
+        if progress_cb is not None:
+            progress_cb(ply_idx, total_plies, move_san)
 
     # Derive initial clock from TimeControl header (e.g. "600+0" -> "10:00") if present
     tc = game.headers.get("TimeControl", "")
@@ -546,7 +581,24 @@ def health_endpoint(request: Request) -> dict[str, Any]:
         "status": "ok",
         "engine_ready": eng is not None,
         "google_configured": is_google_configured(),
+        "storage_mode": get_storage_mode(),
     }
+
+
+@app.get("/sw.js")
+def service_worker_endpoint():
+    """Serve the PWA Service Worker at root scope `/` with no-cache headers."""
+    sw_file = WEB_DIR / "sw.js"
+    if not sw_file.exists():
+        raise HTTPException(status_code=404, detail="Service worker not found.")
+    return FileResponse(
+        str(sw_file),
+        media_type="application/javascript",
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Service-Worker-Allowed": "/",
+        },
+    )
 
 
 @app.get("/")
@@ -577,7 +629,7 @@ def analyse_fen_endpoint(payload: FenRequest, request: Request) -> dict[str, Any
 
 @app.post("/api/analyse-pgn")
 def analyse_pgn_endpoint(payload: PgnRequest, request: Request) -> dict[str, Any]:
-    """Parse a PGN and return move-by-move evaluations, reusing SQLite cache when available."""
+    """Parse a PGN and return move-by-move evaluations, reusing DB cache when available."""
     cached = get_cached_analysis_by_pgn(payload.pgn, depth=payload.depth)
     if cached:
         return cached
@@ -595,6 +647,77 @@ def analyse_pgn_endpoint(payload: PgnRequest, request: Request) -> dict[str, Any
             if g:
                 save_game_analysis(g["id"], result, g["user_color"])
     return result
+
+
+@app.post("/api/analyse-pgn/stream")
+def analyse_pgn_stream_endpoint(payload: PgnRequest, request: Request) -> StreamingResponse:
+    """
+    Stream live move-by-move Stockfish analysis progress via Server-Sent Events (SSE).
+    Emits `event: progress` frames `{ply, total, pct, san}` and finishes with `event: done`.
+    """
+    user = _current_user(request)
+    eng = _get_app_engine(request)
+
+    def _sse_frame(event_name: str, data_obj: Any) -> str:
+        return f"event: {event_name}\ndata: {json.dumps(data_obj)}\n\n"
+
+    def _event_generator():
+        cached = get_cached_analysis_by_pgn(payload.pgn, depth=payload.depth)
+        if cached:
+            total = len(cached.get("moves") or [])
+            yield _sse_frame("progress", {"ply": total, "total": total, "pct": 100, "san": "", "cached": True})
+            yield _sse_frame("done", cached)
+            return
+
+        q: queue.Queue[tuple[str, Any]] = queue.Queue()
+        cancel_ev = threading.Event()
+
+        def _on_progress(ply: int, total: int, san: str) -> None:
+            pct = int(round((ply / total) * 100)) if total else 0
+            q.put(("progress", {"ply": ply, "total": total, "pct": min(99, pct), "san": san}))
+
+        def _worker() -> None:
+            try:
+                res = parse_and_analyse_pgn(
+                    payload.pgn,
+                    depth=payload.depth,
+                    engine=eng,
+                    cancel_event=cancel_ev,
+                    progress_cb=_on_progress,
+                )
+                if payload.game_id and user:
+                    g = get_game_by_id(payload.game_id, user_id=user["id"])
+                    if g:
+                        save_game_analysis(g["id"], res, g["user_color"])
+                q.put(("done", res))
+            except Exception as exc:
+                q.put(("error", {"detail": str(exc)}))
+
+        worker = threading.Thread(target=_worker, daemon=True)
+        worker.start()
+
+        try:
+            while True:
+                try:
+                    kind, obj = q.get(timeout=0.5)
+                except queue.Empty:
+                    yield ": keepalive\n\n"
+                    continue
+                yield _sse_frame(kind, obj)
+                if kind in ("done", "error"):
+                    break
+        finally:
+            cancel_ev.set()
+
+    return StreamingResponse(
+        _event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @app.post("/api/explain")
@@ -746,8 +869,57 @@ def auth_me_endpoint(request: Request) -> dict[str, Any]:
         "authenticated": bool(user),
         "user": user,
         "linked_accounts": linked,
+        "preferences": user.get("preferences") if user else None,
         "google_configured": is_google_configured(),
         "google_redirect_uri": google_cfg["redirect_uri"],
+        "storage_mode": get_storage_mode(),
+    }
+
+
+@app.post("/api/auth/register")
+def auth_register_endpoint(
+    payload: RegisterAccountRequest,
+    request: Request,
+    response: Response,
+) -> dict[str, Any]:
+    """Create a cross-device password-protected Blunderless account."""
+    try:
+        user, token = register_password_account(
+            identifier=payload.identifier,
+            password=payload.password,
+            display_name=payload.display_name or "",
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    _set_session_cookie(response, token, request)
+    return {
+        "user": user,
+        "linked_accounts": get_linked_accounts(user["id"]),
+        "preferences": user.get("preferences"),
+        "storage_mode": get_storage_mode(),
+    }
+
+
+@app.post("/api/auth/login")
+def auth_login_endpoint(
+    payload: LoginAccountRequest,
+    request: Request,
+    response: Response,
+) -> dict[str, Any]:
+    """Sign in from any device with an existing email/username and password."""
+    try:
+        user, token = login_password_account(
+            identifier=payload.identifier,
+            password=payload.password,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    _set_session_cookie(response, token, request)
+    return {
+        "user": user,
+        "linked_accounts": get_linked_accounts(user["id"]),
+        "preferences": user.get("preferences"),
+        "storage_mode": get_storage_mode(),
     }
 
 
@@ -755,7 +927,26 @@ def auth_me_endpoint(request: Request) -> dict[str, Any]:
 def auth_local_login_endpoint(payload: LocalLoginRequest, request: Request, response: Response) -> dict[str, Any]:
     user, token = login_local_profile(payload.display_name)
     _set_session_cookie(response, token, request)
-    return {"user": user, "linked_accounts": get_linked_accounts(user["id"])}
+    return {
+        "user": user,
+        "linked_accounts": get_linked_accounts(user["id"]),
+        "preferences": user.get("preferences"),
+        "storage_mode": get_storage_mode(),
+    }
+
+
+@app.get("/api/user/preferences")
+def get_user_preferences_endpoint(request: Request) -> dict[str, Any]:
+    user = _require_user(request)
+    return {"preferences": get_user_preferences(user["id"])}
+
+
+@app.put("/api/user/preferences")
+def update_user_preferences_endpoint(payload: PreferencesPatchRequest, request: Request) -> dict[str, Any]:
+    user = _require_user(request)
+    patch = {k: v for k, v in payload.model_dump().items() if v is not None}
+    updated = update_user_preferences(user["id"], patch)
+    return {"preferences": updated}
 
 
 @app.post("/api/auth/logout")

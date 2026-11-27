@@ -886,6 +886,58 @@
     return pickLine('routine', ctx);
   }
 
+  let _lastExplainData = null;
+  let _factsDrawerOpen = false;
+
+  function renderFactsDrawer(data, ctx = null) {
+    const drawer = document.getElementById('knight-facts-drawer');
+    if (!drawer) return;
+    if (!data || !data.facts) {
+      const evStr = ctx?.evalAfter
+        ? (ctx.evalAfter.type === 'mate' ? `M${ctx.evalAfter.value}` : `${(ctx.evalAfter.value / 100).toFixed(2)}`)
+        : '—';
+      drawer.innerHTML = `
+        <div class="facts-head">VERIFIED ENGINE DATA · CLICK [EXPLAIN] FOR FULL LAYER 2 DIFF</div>
+        <div class="facts-row"><strong>Move:</strong> ${ctx?.moveSan || '—'} · <strong>Best:</strong> ${ctx?.bestMoveSan || '—'} · <strong>Eval:</strong> ${evStr}</div>
+      `;
+      return;
+    }
+
+    const f = data.facts;
+    const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const items = [];
+    if (f.why_played_hurts?.length) {
+      items.push(`<div class="facts-row facts-bad"><strong>Why ${esc(f.played_move || 'move')} hurts:</strong> ${esc(f.why_played_hurts.join('; '))}</div>`);
+    }
+    if (f.why_best_better?.length) {
+      items.push(`<div class="facts-row facts-good"><strong>Why ${esc(f.best_move || 'best')} wins:</strong> ${esc(f.why_best_better.join('; '))}</div>`);
+    }
+    if (f.played_strengths?.length) {
+      items.push(`<div class="facts-row facts-good"><strong>Verified strengths:</strong> ${esc(f.played_strengths.join('; '))}</div>`);
+    }
+    const lineArr = f.demo_mode === 'played' && f.played_line?.length ? f.played_line : (f.best_line || []);
+    const srcLabel = data.source === 'llm' ? 'Stockfish + Layer 2 + Gemini' : 'Stockfish + Layer 2 (Deterministic)';
+
+    drawer.innerHTML = `
+      <div class="facts-head">GROUNDED FACTS · ${esc(srcLabel)}</div>
+      <div class="facts-row"><strong>Eval:</strong> ${esc(f.eval_after)} (Δ ${esc(f.eval_change_pawns)}) · <strong>Best:</strong> ${esc(f.best_move || '—')}</div>
+      ${lineArr.length ? `<div class="facts-row"><strong>Line:</strong> ${esc(lineArr.join(' '))}</div>` : ''}
+      ${items.join('')}
+    `;
+  }
+
+  function toggleFactsDrawer(forceOpen = null) {
+    const drawer = document.getElementById('knight-facts-drawer');
+    const btn = document.getElementById('btn-coach-facts');
+    if (!drawer) return;
+    _factsDrawerOpen = forceOpen !== null ? Boolean(forceOpen) : !_factsDrawerOpen;
+    drawer.classList.toggle('hidden', !_factsDrawerOpen);
+    if (btn) btn.classList.toggle('active', _factsDrawerOpen);
+    if (_factsDrawerOpen) {
+      renderFactsDrawer(_lastExplainData, global.BlunderlessCoachContext || null);
+    }
+  }
+
   async function requestDetailedExplanation(ctx) {
     if (!ctx || !ctx.fen) return;
 
@@ -895,6 +947,14 @@
     }
 
     typeMessage('Checking Stockfish...');
+
+    const preferredTone = (() => {
+      try {
+        const saved = localStorage.getItem('blunderless_tone');
+        if (saved && saved !== 'auto') return saved;
+      } catch (_) {}
+      return ctx.tone || 'instructive';
+    })();
 
     try {
       const res = await fetch('/api/explain', {
@@ -909,13 +969,15 @@
           eval_change: ctx.evalChange || 0,
           best_move: ctx.bestMoveUci,
           best_move_san: ctx.bestMoveSan,
-          tone: ctx.tone || 'instructive',
+          tone: preferredTone,
           mover_name: ctx.moverName || null,
           is_user_move: ctx.isUserMove !== false,
         }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
+      _lastExplainData = data;
+      if (_factsDrawerOpen) renderFactsDrawer(data, ctx);
       if (data.mood) applyStateTransition(data.mood);
       typeMessage(data.text || pickCommentaryForState(_currentState, ctx));
 
@@ -944,6 +1006,8 @@
 
     if (key !== _lastContextKey) {
       _lastContextKey = key;
+      _lastExplainData = null;
+      if (_factsDrawerOpen) renderFactsDrawer(null, ctx);
       typeMessage(pickCommentaryForState(newState, ctx, prevState));
     }
   }
@@ -952,6 +1016,7 @@
     const mascotBtn = document.getElementById('knight-mascot-btn');
     const voiceBtn = document.getElementById('btn-coach-voice');
     const explainBtn = document.getElementById('btn-coach-explain');
+    const factsBtn = document.getElementById('btn-coach-facts');
     if (!mascotBtn) return;
 
     mascotBtn.innerHTML = buildKnightSvg();
@@ -984,11 +1049,23 @@
       });
     }
 
+    if (factsBtn) {
+      factsBtn.addEventListener('click', () => {
+        toggleFactsDrawer();
+      });
+    }
+
     global.addEventListener('blunderless:position-analyzed', (e) => {
       handlePositionAnalyzed(e.detail);
     });
   }
 
   document.addEventListener('DOMContentLoaded', initKnightCoach);
-  global.BlunderlessChesterArt = { buildKnightSvg };
+  global.BlunderlessChesterArt = {
+    buildKnightSvg,
+    say: (msg, mood = null) => {
+      if (mood) applyStateTransition(mood);
+      typeMessage(msg);
+    },
+  };
 })(window);

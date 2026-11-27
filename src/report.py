@@ -833,6 +833,137 @@ def _build_strategy_section(
     }
 
 
+def _parse_time_control(tc: str) -> tuple[Optional[float], float]:
+    """Parse PGN TimeControl like '600+5' or '180' into (base_seconds, increment_seconds)."""
+    raw = (tc or "").strip()
+    if not raw or not raw[0].isdigit():
+        return None, 0.0
+    parts = raw.split("+", 1)
+    try:
+        base = float(parts[0])
+        inc = float(parts[1]) if len(parts) > 1 and parts[1].strip() else 0.0
+        return base, max(0.0, inc)
+    except ValueError:
+        return None, 0.0
+
+
+def compute_clock_analysis(
+    moves_out: list[dict[str, Any]],
+    headers: Optional[dict[str, Any]] = None,
+) -> dict[str, Any]:
+    """
+    Compute per-ply time spent (accounting for increment) and per-side
+    time-management diagnostics (time-trouble vs rushed blunders).
+    Also annotates each move dict in `moves_out` with `time_spent` (seconds).
+    """
+    headers = headers or {}
+    base_sec, inc_sec = _parse_time_control(headers.get("time_control", ""))
+
+    # Thresholds adapt gently to bullet/blitz vs rapid
+    low_clock_threshold = min(60.0, max(15.0, (base_sec or 300.0) * 0.20))
+    ample_clock_threshold = min(120.0, max(30.0, (base_sec or 300.0) * 0.40))
+    rushed_spend_threshold = 5.0 if (base_sec is None or base_sec >= 180.0) else 2.0
+
+    prev_clk: dict[str, Optional[float]] = {"white": base_sec, "black": base_sec}
+    series: list[dict[str, Any]] = []
+
+    per_side: dict[str, dict[str, Any]] = {}
+    for col in ("white", "black"):
+        per_side[col] = {
+            "has_clock_data": False,
+            "moves_with_clock": 0,
+            "spent_list": [],
+            "longest_think": None,
+            "time_trouble_moves": 0,
+            "time_trouble_blunders": 0,
+            "rushed_blunders": 0,
+            "total_blunders_with_clock": 0,
+            "tt_accs": [],
+            "normal_accs": [],
+        }
+
+    for m in moves_out:
+        col = m.get("color")
+        if col not in ("white", "black"):
+            continue
+        clk = m.get("clock_seconds")
+        spent: Optional[float] = None
+        if clk is not None:
+            clk_f = float(clk)
+            if prev_clk[col] is not None:
+                raw_spent = (prev_clk[col] + inc_sec) - clk_f  # type: ignore[operator]
+                spent = round(max(0.0, raw_spent), 1)
+            prev_clk[col] = clk_f
+
+        m["time_spent"] = spent
+
+        if clk is not None and spent is not None:
+            st = per_side[col]
+            st["has_clock_data"] = True
+            st["moves_with_clock"] += 1
+            st["spent_list"].append(spent)
+
+            if st["longest_think"] is None or spent > st["longest_think"]["seconds"]:
+                st["longest_think"] = {
+                    "ply": m["ply"],
+                    "move_number": m["move_number"],
+                    "san": m["san"],
+                    "seconds": spent,
+                }
+
+            clf = (m.get("classification") or "").lower()
+            acc = _move_accuracy(float(m.get("epl", 0.0)))
+            in_time_trouble = float(clk) < low_clock_threshold
+            if in_time_trouble:
+                st["time_trouble_moves"] += 1
+                st["tt_accs"].append(acc)
+            else:
+                st["normal_accs"].append(acc)
+
+            if clf in ("blunder", "miss"):
+                st["total_blunders_with_clock"] += 1
+                if in_time_trouble:
+                    st["time_trouble_blunders"] += 1
+                elif spent < rushed_spend_threshold and float(clk) >= ample_clock_threshold:
+                    st["rushed_blunders"] += 1
+
+            series.append({
+                "ply": m["ply"],
+                "move_number": m["move_number"],
+                "color": col,
+                "san": m["san"],
+                "time_spent": spent,
+                "clock_seconds": round(float(clk), 1),
+                "classification": clf,
+            })
+
+    out_sides: dict[str, dict[str, Any]] = {}
+    for col in ("white", "black"):
+        st = per_side[col]
+        spents = st["spent_list"]
+        out_sides[col] = {
+            "has_clock_data": st["has_clock_data"],
+            "moves_with_clock": st["moves_with_clock"],
+            "avg_time_spent": round(sum(spents) / len(spents), 1) if spents else None,
+            "max_time_spent": round(max(spents), 1) if spents else None,
+            "longest_think": st["longest_think"],
+            "time_trouble_moves": st["time_trouble_moves"],
+            "time_trouble_blunders": st["time_trouble_blunders"],
+            "rushed_blunders": st["rushed_blunders"],
+            "total_blunders_with_clock": st["total_blunders_with_clock"],
+            "time_trouble_accuracy": round(sum(st["tt_accs"]) / len(st["tt_accs"]), 1) if st["tt_accs"] else None,
+            "normal_accuracy": round(sum(st["normal_accs"]) / len(st["normal_accs"]), 1) if st["normal_accs"] else None,
+            "low_clock_threshold_sec": round(low_clock_threshold),
+        }
+
+    return {
+        "has_clock_data": bool(series),
+        "series": series,
+        "white": out_sides["white"],
+        "black": out_sides["black"],
+    }
+
+
 def _build_next_game_tips(
     stages: dict[str, dict[str, Any]],
     tactics: dict[str, Any],
@@ -840,11 +971,33 @@ def _build_next_game_tips(
     feats: dict[str, Any],
     player_moves: list[dict[str, Any]],
     seed: str,
+    clock_stats: Optional[dict[str, Any]] = None,
 ) -> list[dict[str, str]]:
     """Generate 3-4 prioritized, concrete Next-Game Focus Tips driven by actual game metrics."""
     tips: list[dict[str, str]] = []
     blunders = sum(1 for m in player_moves if m.get("classification") == "blunder")
     misses = sum(1 for m in player_moves if m.get("classification") == "miss")
+
+    # Priority 0: Clock-specific habits (rushed blunders vs time trouble)
+    if clock_stats and clock_stats.get("has_clock_data"):
+        if int(clock_stats.get("rushed_blunders") or 0) >= 1:
+            rb = int(clock_stats["rushed_blunders"])
+            tips.append({
+                "title": "Slow Down on Critical Turns — You Had Plenty of Clock",
+                "detail": (
+                    f"{rb} of your big {'mistakes' if rb != 1 else 'mistake'} happened in under 5 seconds while you still had "
+                    f"ample time left. Force a 5-second pause before moving in tense middlegame positions."
+                ),
+            })
+        elif int(clock_stats.get("time_trouble_blunders") or 0) >= 2:
+            ttb = int(clock_stats["time_trouble_blunders"])
+            tips.append({
+                "title": "Budget Your Clock Earlier to Avoid Time Scrambling",
+                "detail": (
+                    f"You made {ttb} costly errors with under {clock_stats.get('low_clock_threshold_sec', 60)}s left. "
+                    f"Play routine opening moves more decisively so you save time for sharp middlegame tactics."
+                ),
+            })
 
     # Priority 1: Hanging pieces / blunder check
     if feats["hanging_oversights"] or blunders >= 2:
@@ -1067,10 +1220,14 @@ def build_game_report(
         1 for m in moves_out if m.get("classification") in ("blunder", "miss")
     )
 
+    clock_info = compute_clock_analysis(moves_out, headers=headers)
+
     report: dict[str, Any] = {
         "phase_ranges": {
             k: (list(v) if v is not None else None) for k, v in phase_ranges.items()
         },
+        "clock_series": clock_info["series"],
+        "has_clock_data": clock_info["has_clock_data"],
         "white": {},
         "black": {},
     }
@@ -1107,7 +1264,10 @@ def build_game_report(
 
         tactics = _build_tactics_section(player_moves, feats, tone, seed)
         strategy = _build_strategy_section(player_moves, feats, tone, seed)
-        tips = _build_next_game_tips(stages, tactics, strategy, feats, player_moves, seed)
+        side_clock = clock_info[color]
+        tips = _build_next_game_tips(
+            stages, tactics, strategy, feats, player_moves, seed, clock_stats=side_clock
+        )
         overall_acc = summary.get(f"{color}_accuracy")
         overall_text = _build_overall_summary(
             player_name=player_name,
@@ -1128,6 +1288,7 @@ def build_game_report(
             "stages": stages,
             "tactics": tactics,
             "strategy": strategy,
+            "clock": side_clock,
             "tips": tips,
         }
 

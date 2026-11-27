@@ -32,7 +32,7 @@
   <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
   <script src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"></script>
 
-  <link rel="stylesheet" href="/static/styles.css?v=33" />
+  <link rel="stylesheet" href="/static/styles.css?v=34" />
   <script>
     // Apply saved theme & matching iOS status-bar theme-color before first paint
     (function () {
@@ -430,10 +430,12 @@
             <span id="knight-mood-label" class="knight-mood-label">CHESTER · DEADPAN</span>
             <div class="knight-bubble-actions">
               <button id="btn-coach-explain" class="knight-mini-btn" title="Why was the best move better?">[EXPLAIN]</button>
+              <button id="btn-coach-facts" class="knight-mini-btn" title="Inspect verified Stockfish & Layer 2 facts">[FACTS]</button>
               <button id="btn-coach-voice" class="knight-mini-btn" title="Toggle Chester Audio">[MUTE]</button>
             </div>
           </div>
           <p id="knight-speech-text" class="knight-speech-text"><span id="knight-typed"></span><span class="knight-cursor">█</span></p>
+          <div id="knight-facts-drawer" class="knight-facts-drawer hidden" aria-label="Verified Stockfish and Layer 2 facts"></div>
           <div class="knight-bubble-tail" aria-hidden="true"></div>
         </div>
         <button id="knight-mascot-btn" class="knight-mascot-btn" title="Click Chester to explain why the best move is stronger"></button>
@@ -503,6 +505,23 @@
           </div>
           <div id="subgame-moves" class="subgame-moves"></div>
         </div>
+
+        <!-- Guided Key Moments Walkthrough & Retry Mistake Strip -->
+        <div class="key-moments-strip hidden" id="key-moments-strip">
+          <div class="km-nav-row">
+            <button id="btn-key-prev" class="btn btn-sm btn-secondary" title="Previous Key Moment">‹ Key</button>
+            <span id="key-moment-counter" class="km-counter">Key Moments</span>
+            <button id="btn-key-next" class="btn btn-sm btn-secondary" title="Next Key Moment">Key ›</button>
+            <button id="btn-retry-mistake" class="btn btn-sm btn-sage hidden" title="Hide answer and try finding a better move">↻ Retry</button>
+          </div>
+          <div class="retry-banner hidden" id="retry-banner">
+            <span id="retry-status" class="retry-status">Find a better move on the board!</span>
+            <div class="retry-actions">
+              <button id="btn-retry-reveal" class="btn btn-sm btn-secondary">Reveal</button>
+              <button id="btn-retry-exit" class="btn btn-sm btn-text">Exit</button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- Opening Subheader Bar (Live updated on every move) -->
@@ -556,6 +575,22 @@
                 <span id="eval-graph-hover" class="eval-graph-hover">Click graph to jump</span>
               </div>
               <svg id="eval-graph-svg" class="eval-graph-svg" viewBox="0 0 400 110" preserveAspectRatio="none"></svg>
+            </div>
+
+            <!-- Time Spent Per Move Graph (shown when PGN includes [%clk] data) -->
+            <div id="clock-chart-card" class="eval-graph-card clock-chart-card hidden">
+              <div class="eval-graph-header">
+                <span>TIME PER MOVE</span>
+                <span id="clock-graph-summary" class="eval-graph-hover">Click bar to jump</span>
+              </div>
+              <svg id="clock-graph-svg" class="eval-graph-svg clock-graph-svg" viewBox="0 0 400 84" preserveAspectRatio="none"></svg>
+              <div id="clock-pills-row" class="clock-pills-row"></div>
+            </div>
+
+            <!-- Share Review Card & Annotated PGN Export -->
+            <div class="review-share-row">
+              <button type="button" id="btn-share-card" class="btn btn-secondary btn-sm" title="Generate shareable Discord/social review PNG card">🖼 Share Card (PNG)</button>
+              <button type="button" id="btn-export-pgn" class="btn btn-secondary btn-sm" title="Download PGN annotated with Stockfish evals & move labels">⬇ Annotated PGN</button>
             </div>
 
             <!-- 2-Column Players & Accuracy -->
@@ -995,6 +1030,12 @@
           </div>
         </div>
 
+        <!-- 6.5 Time Management & Clock Trouble -->
+        <div id="ins-time-card" class="editorial-card hidden">
+          <div class="card-head-title">TIME MANAGEMENT &amp; CLOCK TROUBLE</div>
+          <div id="ins-time-body" class="ins-time-grid"></div>
+        </div>
+
         <!-- 7. How Your Games End -->
         <div class="editorial-card">
           <div class="card-head-title">HOW YOUR GAMES END</div>
@@ -1092,11 +1133,39 @@
       </div>
 
       <div class="editorial-card settings-card">
-        <div class="card-head-title">ACCOUNT &amp; CHESS CONNECTIONS</div>
+        <div class="card-head-title">CHESTER &amp; ENGINE PREFERENCES</div>
         <div class="setting-row">
           <div class="setting-info">
-            <div class="setting-name">Connected Accounts</div>
-            <div class="setting-desc">Link or unlink your Chess.com and Lichess profiles or switch display name.</div>
+            <div class="setting-name">Chester's Coaching Tone</div>
+            <div class="setting-desc">Choose how Chester speaks during move explanations (or Auto to adapt to game intensity).</div>
+          </div>
+          <select id="setting-tone-select" class="filter-select setting-select" aria-label="Chester Coaching Tone">
+            <option value="auto">Auto (Adaptive)</option>
+            <option value="instructive">Instructive</option>
+            <option value="analytical">Analytical</option>
+            <option value="sarcastic">Sarcastic (Roast)</option>
+          </select>
+        </div>
+        <div class="setting-row setting-row-border">
+          <div class="setting-info">
+            <div class="setting-name">Stockfish Analysis Depth</div>
+            <div class="setting-desc">Higher depth is more accurate; lower depth streams faster on mobile.</div>
+          </div>
+          <select id="setting-depth-select" class="filter-select setting-select" aria-label="Analysis Depth">
+            <option value="8">Depth 8 (Fastest)</option>
+            <option value="10" selected>Depth 10 (Balanced)</option>
+            <option value="12">Depth 12 (Deep)</option>
+            <option value="14">Depth 14 (Very Deep)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="editorial-card settings-card">
+        <div class="card-head-title">ACCOUNT &amp; CLOUD SYNC</div>
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-name">Connected Accounts &amp; Cloud Login</div>
+            <div class="setting-desc" id="setting-storage-desc">Create an account to sign in from any device and sync Chess.com, Lichess, games, and preferences.</div>
           </div>
           <button type="button" id="setting-open-account-btn" class="btn btn-secondary btn-sm">MANAGE ACCOUNTS</button>
         </div>
@@ -1148,21 +1217,43 @@
         <button id="modal-close-btn" class="modal-close-btn" aria-label="Close">✕</button>
       </div>
       <div class="modal-body">
-        <!-- Auth Section -->
+        <!-- Auth Section (Cross-Device Account + Google OAuth + Quick Guest) -->
         <div class="modal-section">
-          <div class="modal-section-title">1. BLUNDERLESS SIGN-IN</div>
+          <div class="modal-section-head">
+            <div class="modal-section-title">1. BLUNDERLESS ACCOUNT</div>
+            <span id="modal-storage-badge" class="storage-badge">SYNC</span>
+          </div>
           <div id="modal-signed-out">
             <div id="modal-google-wrap" class="hidden">
               <button id="modal-google-btn" class="btn btn-primary modal-full-btn">CONTINUE WITH GOOGLE</button>
-              <div class="modal-divider">OR QUICK PROFILE</div>
+              <div class="modal-divider">OR ACCOUNT LOGIN</div>
             </div>
-            <div class="modal-inline-row">
-              <input id="modal-local-name" class="text-input" type="text" placeholder="Pick a display name..." />
-              <button id="modal-local-btn" class="btn btn-primary btn-sm">SIGN IN</button>
+
+            <div class="auth-mode-tabs" role="tablist" aria-label="Account mode">
+              <button type="button" id="auth-tab-login" class="auth-tab-btn active" data-mode="login" role="tab" aria-selected="true">Sign In</button>
+              <button type="button" id="auth-tab-register" class="auth-tab-btn" data-mode="register" role="tab" aria-selected="false">Create Account</button>
             </div>
-            <div class="modal-sub-note">
-              Or jump straight in by linking your Chess.com or Lichess username below.
-            </div>
+
+            <form id="modal-login-form" class="auth-stack-form" autocomplete="on">
+              <input id="modal-login-ident" class="text-input" type="text" placeholder="Email or username" autocomplete="username" required />
+              <input id="modal-login-pass" class="text-input" type="password" placeholder="Password" autocomplete="current-password" required />
+              <button type="submit" id="modal-login-submit" class="btn btn-primary modal-full-btn">SIGN IN FROM ANY DEVICE</button>
+            </form>
+
+            <form id="modal-register-form" class="auth-stack-form hidden" autocomplete="on">
+              <input id="modal-reg-ident" class="text-input" type="text" placeholder="Email or username (3+ chars)" autocomplete="username" required />
+              <input id="modal-reg-name" class="text-input" type="text" placeholder="Display name (optional)" autocomplete="nickname" />
+              <input id="modal-reg-pass" class="text-input" type="password" placeholder="Password (min 6 characters)" autocomplete="new-password" minlength="6" required />
+              <button type="submit" id="modal-reg-submit" class="btn btn-primary modal-full-btn">CREATE CLOUD ACCOUNT</button>
+            </form>
+
+            <details class="guest-profile-details">
+              <summary>Quick Guest Profile (no password)</summary>
+              <div class="modal-inline-row" style="margin-top:8px;">
+                <input id="modal-local-name" class="text-input" type="text" placeholder="Pick a display name..." />
+                <button type="button" id="modal-local-btn" class="btn btn-secondary btn-sm">CONTINUE</button>
+              </div>
+            </details>
           </div>
           <div id="modal-signed-in" class="hidden">
             <div class="signed-in-row">
@@ -1207,9 +1298,9 @@
   </div>
 
   <script src="/static/pieces.js?v=11"></script>
-  <script src="/static/app.js?v=29"></script>
-  <script src="/static/coach.js?v=28"></script>
-  <script src="/static/platform.js?v=33"></script>
+  <script src="/static/app.js?v=34"></script>
+  <script src="/static/coach.js?v=34"></script>
+  <script src="/static/platform.js?v=34"></script>
 </body>
 
 </html>
