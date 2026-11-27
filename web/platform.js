@@ -170,11 +170,14 @@
   function switchAppView(viewName) {
     const valid = ['home', 'analyze', 'games', 'insights', 'settings'];
     if (!valid.includes(viewName)) viewName = 'home';
+    const wasSameView = pState.view === viewName;
     pState.view = viewName;
     try { sessionStorage.setItem('blunderless_view', viewName); } catch (_) {}
 
-    document.querySelectorAll('.nav-view-btn').forEach((btn) => {
-      btn.classList.toggle('active', btn.dataset.view === viewName);
+    document.querySelectorAll('.nav-view-btn, .mobile-nav-btn').forEach((btn) => {
+      const isActive = btn.dataset.view === viewName;
+      btn.classList.toggle('active', isActive);
+      btn.setAttribute('aria-current', isActive ? 'page' : 'false');
     });
 
     valid.forEach((v) => {
@@ -184,10 +187,17 @@
       el.classList.toggle('hidden', v !== viewName);
     });
 
+    // Tapping the active tab again scrolls cleanly to top (native mobile app convention)
+    const activeViewEl = $(`view-${viewName}`);
+    if (wasSameView && activeViewEl && activeViewEl.scrollTop > 0) {
+      activeViewEl.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
     syncLandingMode();
 
     if (viewName === 'analyze') {
-      setTimeout(() => global.BlunderlessBoard?.resize(), 30);
+      requestAnimationFrame(() => global.BlunderlessBoard?.resize());
+      setTimeout(() => global.BlunderlessBoard?.resize(), 60);
     } else if (viewName === 'home') {
       loadHomeDashboard();
     } else if (viewName === 'games') {
@@ -1198,9 +1208,9 @@
   function initPlatform() {
     initBrandArt();
 
-    // Topbar Navigation
+    // Topbar & Mobile Bottom Tab Navigation
     $('brand-home-btn')?.addEventListener('click', () => switchAppView('home'));
-    document.querySelectorAll('.nav-view-btn').forEach((btn) => {
+    document.querySelectorAll('.nav-view-btn, .mobile-nav-btn').forEach((btn) => {
       btn.addEventListener('click', () => switchAppView(btn.dataset.view));
     });
 

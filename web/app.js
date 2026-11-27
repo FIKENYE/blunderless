@@ -640,41 +640,87 @@ function initBoard() {
 
 
   const boardEl = $('board');
+  const boardWrap = $('board-wrap');
+  const boardContainer = document.querySelector('.board-container');
   const evalShell = $('eval-bar-shell');
   const topBar = $('top-player-bar');
   const botBar = $('bot-player-bar');
+  const utilityRail = document.querySelector('.board-utility-rail');
 
+  let resizeRaf = null;
   const resize = () => {
     const stage = document.querySelector('.left-stage');
-    if (!stage) return;
+    if (!stage || stage.clientWidth === 0) return;
 
+    const vw = window.innerWidth;
+    const vh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
     const coachEl = $('knight-coach-stage');
-    const isDesktopSide = window.innerWidth >= 1220 && coachEl;
-    const coachReserveW = isDesktopSide ? Math.min(360, coachEl.offsetWidth + 28) : 0;
-    const coachReserveH = (!isDesktopSide && coachEl) ? coachEl.offsetHeight + 16 : 0;
+    const isStackedLayout = vw <= 1023; // Phone & Portrait iPad/Tablet
+    let rawSize;
 
-    // Available space accounting for padding, player bars, and floating knight coach
-    const availH = stage.clientHeight - 130 - coachReserveH;
-    const availW = stage.clientWidth - 110 - coachReserveW;
-    const rawSize = Math.max(260, Math.min(availH, availW, 680));
+    if (isStackedLayout) {
+      // Utility rail moves horizontally beneath the board, so only eval bar + gap take width
+      const isPhone = vw <= 767;
+      const evalReserveW = (evalShell?.offsetWidth || (isPhone ? 20 : 22)) + (isPhone ? 5 : 6);
+      const sidePad = isPhone ? 14 : 32;
+      const maxWidthCap = isPhone ? 540 : 580;
+      const availW = Math.min(stage.clientWidth - evalReserveW - sidePad, maxWidthCap);
+
+      // Also cap against viewport height so landscape phones & short screens stay comfortable
+      const verticalChrome = isPhone ? 245 : 310;
+      const availH = Math.max(240, vh - verticalChrome);
+      rawSize = Math.max(224, Math.min(availW, availH));
+    } else {
+      const isDesktopSide = vw >= 1220 && coachEl;
+      const coachReserveW = isDesktopSide ? Math.min(360, coachEl.offsetWidth + 28) : 0;
+      const coachReserveH = (!isDesktopSide && coachEl) ? coachEl.offsetHeight + 16 : 0;
+
+      // Available space accounting for padding, player bars, vertical utility rail, and Chester
+      const availH = stage.clientHeight - 130 - coachReserveH;
+      const availW = stage.clientWidth - 110 - coachReserveW;
+      rawSize = Math.max(260, Math.min(availH, availW, 680));
+    }
 
     // Snap to 8px multiple for pixel-crisp squares
     const snapped = Math.floor(rawSize / 8) * 8;
 
     boardEl.style.width = snapped + 'px';
     boardEl.style.height = snapped + 'px';
-    
+
     // Eval bar height matches the 8x8 chessboard only
     evalShell.style.height = snapped + 'px';
 
-    // Player bars match the exact width of the 8x8 board
+    // Player bars (and horizontal mobile utility strip) match exact width of the 8x8 board
     topBar.style.width = snapped + 'px';
     botBar.style.width = snapped + 'px';
+    if (utilityRail) {
+      utilityRail.style.width = isStackedLayout ? snapped + 'px' : '';
+    }
+
+    // Align eval bar flush with the top edge of the 8x8 board when stacked vertically
+    if (isStackedLayout && boardWrap && boardContainer) {
+      const topOffset = Math.max(0, Math.round(boardWrap.getBoundingClientRect().top - boardContainer.getBoundingClientRect().top));
+      evalShell.style.marginTop = topOffset + 'px';
+    } else {
+      evalShell.style.marginTop = '';
+    }
 
     state.board.resize();
   };
 
-  window.addEventListener('resize', resize);
+  const scheduleResize = () => {
+    if (resizeRaf) cancelAnimationFrame(resizeRaf);
+    resizeRaf = requestAnimationFrame(() => {
+      resizeRaf = null;
+      resize();
+    });
+  };
+
+  window.addEventListener('resize', scheduleResize);
+  window.addEventListener('orientationchange', () => setTimeout(scheduleResize, 120));
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', scheduleResize);
+  }
   setTimeout(resize, 50);
   setupBoardAnnotations();
   setupClickToMove();
@@ -707,20 +753,25 @@ function getAnnotationStyle(e) {
 }
 
 function getSquareFromPointer(e) {
-  const sqEl = e.target.closest('[data-square]');
+  const pt = (e.changedTouches && e.changedTouches[0]) || (e.touches && e.touches[0]) || e;
+  const hitTarget =
+    e.changedTouches && typeof document.elementFromPoint === 'function'
+      ? document.elementFromPoint(pt.clientX, pt.clientY)
+      : e.target;
+  const sqEl = hitTarget?.closest?.('[data-square]');
   if (sqEl && sqEl.dataset.square) return sqEl.dataset.square;
 
   const boardInner = $('board').querySelector('.board-b72b1') || $('board');
   const rect = boardInner.getBoundingClientRect();
   if (
-    e.clientX < rect.left || e.clientX > rect.right ||
-    e.clientY < rect.top || e.clientY > rect.bottom
+    pt.clientX < rect.left || pt.clientX > rect.right ||
+    pt.clientY < rect.top || pt.clientY > rect.bottom
   ) {
     return null;
   }
 
-  const col = Math.min(7, Math.max(0, Math.floor(((e.clientX - rect.left) / rect.width) * 8)));
-  const row = Math.min(7, Math.max(0, Math.floor(((e.clientY - rect.top) / rect.height) * 8)));
+  const col = Math.min(7, Math.max(0, Math.floor(((pt.clientX - rect.left) / rect.width) * 8)));
+  const row = Math.min(7, Math.max(0, Math.floor(((pt.clientY - rect.top) / rect.height) * 8)));
   const fileIdx = state.orientation === 'white' ? col : 7 - col;
   const rankIdx = state.orientation === 'white' ? 7 - row : row;
   return String.fromCharCode(97 + fileIdx) + (rankIdx + 1);
@@ -2194,69 +2245,95 @@ function enterSubgameWithMove(fromSq, toSq, branchPly = state.plyIndex) {
   return true;
 }
 
+function handleSquareTap(sq) {
+  if (!sq || state.subgame.busy) return;
+
+  // 1. If Best Move Arrow is visible in main-game mode and user taps its destination square,
+  //    take back the move (ply - 1), play the best move, and enter Subgame Mode vs Stockfish!
+  if (!state.subgame.active && state.showBestMove && !state.isPreviewingBest) {
+    const bestUci = getBestMoveForCurrentPly();
+    if (bestUci && bestUci.length >= 4 && sq === bestUci.slice(2, 4)) {
+      const branchPly = state.plyIndex === 0 ? 0 : state.plyIndex - 1;
+      enterSubgameWithMove(bestUci.slice(0, 2), bestUci.slice(2, 4), branchPly);
+      return;
+    }
+  }
+
+  const game = getActiveChessInstance();
+  if (game.game_over()) return;
+
+  // 2. If a piece is already selected, check if tapped square is a legal destination
+  if (_selectedSquare) {
+    if (_selectedSquare === sq) {
+      clearMoveSelection();
+      return;
+    }
+    const legalMatch = game.moves({ square: _selectedSquare, verbose: true }).find(m => m.to === sq);
+    if (legalMatch) {
+      const fromSq = _selectedSquare;
+      clearMoveSelection();
+      if (state.subgame.active) {
+        const moveObj = state.subgame.game.move({ from: fromSq, to: sq, promotion: 'q' });
+        if (moveObj) handleSubgameMove(moveObj, true);
+      } else {
+        enterSubgameWithMove(fromSq, sq, state.plyIndex);
+      }
+      return;
+    }
+  }
+
+  // 3. Otherwise, if tapped square has a piece of the active turn, select it & show all legal moves
+  const piece = game.get(sq);
+  if (piece && piece.color === game.turn()) {
+    showLegalMovesFrom(sq, game);
+  } else {
+    clearMoveSelection();
+  }
+}
+
 function setupClickToMove() {
   const boardEl = $('board');
   if (!boardEl) return;
 
   let downPos = null;
+  let touchStartPos = null;
+  let lastTouchEndTs = 0;
+
+  // Touch tap-to-move for phones & iPads (avoids conflicting with drag-and-drop)
+  boardEl.addEventListener('touchstart', (e) => {
+    if (e.touches.length === 1) {
+      touchStartPos = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    } else {
+      touchStartPos = null;
+    }
+  }, { passive: true });
+
+  boardEl.addEventListener('touchend', (e) => {
+    if (!touchStartPos || e.changedTouches.length === 0) return;
+    const t = e.changedTouches[0];
+    const dist = Math.hypot(t.clientX - touchStartPos.x, t.clientY - touchStartPos.y);
+    touchStartPos = null;
+    lastTouchEndTs = Date.now();
+    // Slightly larger 10px tolerance for finger taps on mobile/tablet
+    if (dist > 10 || state.subgame.busy) return;
+    handleSquareTap(getSquareFromPointer(e));
+  }, { passive: true });
 
   boardEl.addEventListener('mousedown', (e) => {
+    if (Date.now() - lastTouchEndTs < 450) return;
     if (e.button === 0) {
       downPos = { x: e.clientX, y: e.clientY };
     }
   });
 
   boardEl.addEventListener('mouseup', (e) => {
+    if (Date.now() - lastTouchEndTs < 450) return;
     if (e.button !== 0 || !downPos) return;
     const dist = Math.hypot(e.clientX - downPos.x, e.clientY - downPos.y);
     downPos = null;
     // Only treat as click-to-move when pointer didn't drag
     if (dist > 6 || state.subgame.busy) return;
-
-    const sq = getSquareFromPointer(e);
-    if (!sq) return;
-
-    // 1. If Best Move Arrow is visible in main-game mode and user clicks its destination square,
-    //    take back the move (ply - 1), play the best move, and enter Subgame Mode vs Stockfish!
-    if (!state.subgame.active && state.showBestMove && !state.isPreviewingBest) {
-      const bestUci = getBestMoveForCurrentPly();
-      if (bestUci && bestUci.length >= 4 && sq === bestUci.slice(2, 4)) {
-        const branchPly = state.plyIndex === 0 ? 0 : state.plyIndex - 1;
-        enterSubgameWithMove(bestUci.slice(0, 2), bestUci.slice(2, 4), branchPly);
-        return;
-      }
-    }
-
-    const game = getActiveChessInstance();
-    if (game.game_over()) return;
-
-    // 2. If a piece is already selected, check if clicked square is a legal destination
-    if (_selectedSquare) {
-      if (_selectedSquare === sq) {
-        clearMoveSelection();
-        return;
-      }
-      const legalMatch = game.moves({ square: _selectedSquare, verbose: true }).find(m => m.to === sq);
-      if (legalMatch) {
-        const fromSq = _selectedSquare;
-        clearMoveSelection();
-        if (state.subgame.active) {
-          const moveObj = state.subgame.game.move({ from: fromSq, to: sq, promotion: 'q' });
-          if (moveObj) handleSubgameMove(moveObj, true);
-        } else {
-          enterSubgameWithMove(fromSq, sq, state.plyIndex);
-        }
-        return;
-      }
-    }
-
-    // 3. Otherwise, if clicked square has a piece of the active turn, select it & show all legal moves
-    const piece = game.get(sq);
-    if (piece && piece.color === game.turn()) {
-      showLegalMovesFrom(sq, game);
-    } else {
-      clearMoveSelection();
-    }
+    handleSquareTap(getSquareFromPointer(e));
   });
 }
 

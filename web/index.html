@@ -3,7 +3,10 @@
 
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>Blunderless — Chess Analysis &amp; AI Coach</title>
   <meta name="description" content="Link your Chess.com or Lichess account, find recurring mistakes, and get coaching grounded strictly in Stockfish analysis." />
   <meta name="theme-color" content="#C86D3B" />
@@ -26,7 +29,7 @@
   <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
   <script src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"></script>
 
-  <link rel="stylesheet" href="/static/styles.css?v=30" />
+  <link rel="stylesheet" href="/static/styles.css?v=31" />
   <script>
     // Apply saved theme before first paint so dark mode never flashes white
     (function () {
@@ -149,7 +152,7 @@
             <a href="#lp-how" class="lp-nav-link" data-lp-scroll="lp-how">How it works</a>
             <a href="#lp-sample" class="lp-nav-link" data-lp-scroll="lp-sample">Sample review</a>
             <a href="#lp-connect" class="lp-nav-link" data-lp-scroll="lp-connect">Connect</a>
-            <button type="button" id="lp-open-board-btn" class="lp-nav-link lp-nav-btn-link">Board</button>
+            <button type="button" id="lp-open-board-btn" class="lp-nav-link lp-nav-btn-link lp-nav-keep">Board</button>
             <button type="button" id="lp-open-settings-btn" class="lp-nav-link lp-nav-btn-link">Settings</button>
             <button type="button" id="lp-signin-btn" class="lp-signin-btn">Sign in</button>
           </nav>
@@ -1073,6 +1076,30 @@
     </div>
   </section>
 
+  <!-- ══ Mobile & Portrait Tablet Bottom Tab Navigation (Chess.com-style) ══ -->
+  <nav class="mobile-bottom-nav" id="mobile-bottom-nav" aria-label="Mobile navigation">
+    <button type="button" class="mobile-nav-btn active" data-view="home" aria-label="Home">
+      <span class="mnav-icon" aria-hidden="true">⌂</span>
+      <span class="mnav-label">HOME</span>
+    </button>
+    <button type="button" class="mobile-nav-btn" data-view="analyze" aria-label="Analyze">
+      <span class="mnav-icon" aria-hidden="true">♟</span>
+      <span class="mnav-label">ANALYZE</span>
+    </button>
+    <button type="button" class="mobile-nav-btn" data-view="games" aria-label="My Games">
+      <span class="mnav-icon" aria-hidden="true">▤</span>
+      <span class="mnav-label">GAMES</span>
+    </button>
+    <button type="button" class="mobile-nav-btn" data-view="insights" aria-label="Insights">
+      <span class="mnav-icon" aria-hidden="true">◈</span>
+      <span class="mnav-label">INSIGHTS</span>
+    </button>
+    <button type="button" class="mobile-nav-btn" data-view="settings" aria-label="Settings">
+      <span class="mnav-icon" aria-hidden="true">⚙</span>
+      <span class="mnav-label">SETTINGS</span>
+    </button>
+  </nav>
+
   <!-- ══ Account & Platform Connections Modal ══ -->
   <div id="account-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-label="Account and Connections">
     <div class="modal-card">
@@ -1140,9 +1167,9 @@
   </div>
 
   <script src="/static/pieces.js?v=11"></script>
-  <script src="/static/app.js?v=26"></script>
+  <script src="/static/app.js?v=27"></script>
   <script src="/static/coach.js?v=26"></script>
-  <script src="/static/platform.js?v=30"></script>
+  <script src="/static/platform.js?v=31"></script>
 </body>
 
 </html>

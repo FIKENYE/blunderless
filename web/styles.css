@@ -43,6 +43,8 @@
   --eval-w: 28px;
   --eval-gap: 8px;
   --rail-w: 40px;
+  --mobile-nav-h: 58px;
+  --mobile-dock-h: 88px;
   
   --font: 'Departure Mono', monospace, ui-monospace;
 }
@@ -86,6 +88,7 @@ html,
 body {
   width: 100%;
   height: 100%;
+  height: 100dvh;
   overflow: hidden;
   font-family: var(--font);
   background: var(--canvas);
@@ -93,6 +96,7 @@ body {
   font-size: 14px;
   line-height: 1.4;
   -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
 }
 
 body {
@@ -272,6 +276,7 @@ body {
   flex: 1;
   overflow: hidden;
   height: calc(100vh - var(--topbar-h));
+  height: calc(100dvh - var(--topbar-h));
 }
 
 /* ── Left Stage: Centered Board Assembly + Floating Chester Coach Combo ── */
@@ -455,6 +460,7 @@ body {
   position: relative;
   display: inline-block;
   line-height: 0;
+  touch-action: none;
 }
 
 .board-arrows-overlay {
@@ -519,6 +525,7 @@ body {
   position: relative;
   box-shadow: 2px 2px 0 var(--espresso);
   background: var(--espresso);
+  touch-action: none;
 }
 
 .chess-board .board-b72b1 {
@@ -4646,4 +4653,958 @@ body.landing-mode .topbar {
   color: var(--c-blunder);
   font-size: 11.5px;
   font-weight: 700;
+}
+
+/* =========================================================================
+   DYNAMIC MOBILE & IPAD / TABLET RESPONSIVE SYSTEM (Chess.com-Inspired)
+   - Desktop (>= 1220px): Existing side-by-side workspace untouched
+   - iPad Landscape / Compact Desktop (1024px - 1219px): Slim 2-col board + sidebar
+   - iPad Portrait & Mobile (<= 1023px): Bottom tab bar, single-column board stack,
+     Chester coach header bar, horizontal board utility strip & sticky playback dock
+   - Mobile Phone (<= 767px): Edge-to-edge board, My Games card list, 2-col KPIs,
+     bottom-sheet modal & iOS-safe touch targets
+   ========================================================================= */
+
+/* Bottom Tab Navigation (hidden on desktop / landscape iPad) */
+.mobile-bottom-nav {
+  display: none;
+}
+
+/* ── Tier 1: iPad Landscape & Compact Desktop (1024px - 1219px) ── */
+@media (max-width: 1219px) and (min-width: 1024px) {
+  .topbar {
+    padding: 0 14px;
+    gap: 10px;
+  }
+
+  .quick-user-box {
+    display: none;
+  }
+
+  .nav-view-btn {
+    padding: 6px 9px;
+    font-size: 11px;
+  }
+
+  .workspace {
+    grid-template-columns: 1fr minmax(330px, 380px);
+  }
+
+  .left-stage {
+    padding: 8px 12px;
+    gap: 8px;
+  }
+
+  .knight-coach-stage {
+    order: -1;
+    max-width: 540px;
+  }
+
+  .knight-mascot-btn,
+  .knight-pixel-svg {
+    width: 72px;
+    height: 72px;
+    flex-shrink: 0;
+  }
+
+  .knight-speech-text {
+    font-size: 12px;
+    min-height: 36px;
+    max-height: 70px;
+    padding: 6px 9px;
+  }
+}
+
+/* ── Tier 2: iPad Portrait & Mobile (<= 1023px) ── */
+@media (max-width: 1023px) {
+  :root {
+    --topbar-h: 48px;
+    --eval-w: 22px;
+    --eval-gap: 6px;
+  }
+
+  /* Compact App Topbar: Logo + Account Pill (Nav moves to Bottom Tab Bar) */
+  .topbar {
+    height: calc(var(--topbar-h) + env(safe-area-inset-top, 0px));
+    padding: env(safe-area-inset-top, 0px) 12px 0;
+    gap: 8px;
+  }
+
+  .primary-nav,
+  .quick-user-box {
+    display: none;
+  }
+
+  .brand-frame {
+    padding: 3px 8px;
+    gap: 7px;
+  }
+
+  .logo {
+    font-size: 14px;
+    letter-spacing: 0.12em;
+  }
+
+  /* Chess.com-Style Fixed Bottom Tab Bar */
+  .mobile-bottom-nav {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: calc(var(--mobile-nav-h) + env(safe-area-inset-bottom, 0px));
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    background: var(--surface);
+    border-top: 2px solid var(--espresso);
+    z-index: 40;
+  }
+
+  /* Keep signed-out Landing Page clean without app bottom bar */
+  body.landing-mode .mobile-bottom-nav {
+    display: none;
+  }
+
+  .mobile-nav-btn {
+    font-family: var(--font);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    border: none;
+    background: transparent;
+    color: var(--roast);
+    cursor: pointer;
+    position: relative;
+    padding: 6px 2px;
+    min-height: 48px;
+    transition: background 0.12s ease, color 0.12s ease;
+  }
+
+  .mobile-nav-btn .mnav-icon {
+    font-size: 17px;
+    line-height: 1;
+  }
+
+  .mobile-nav-btn .mnav-label {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    line-height: 1;
+  }
+
+  .mobile-nav-btn.active {
+    color: var(--espresso);
+    background: rgba(200, 109, 59, 0.14);
+  }
+
+  .mobile-nav-btn.active::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 14%;
+    right: 14%;
+    height: 3px;
+    background: var(--cta-terracotta);
+  }
+
+  /* Keep Board button visible on mobile landing header */
+  .lp-nav-link.lp-nav-keep {
+    display: inline-flex;
+    align-items: center;
+    padding: 6px 8px;
+    font-weight: 700;
+    color: var(--espresso);
+  }
+
+  /* Scrollable Page Views clear the bottom nav bar */
+  .view-scroll {
+    min-height: 0;
+    padding: 16px 18px calc(var(--mobile-nav-h) + env(safe-area-inset-bottom, 0px) + 28px);
+    -webkit-overflow-scrolling: touch;
+  }
+
+  #view-home.view-scroll {
+    padding: 0;
+  }
+
+  .home-dashboard-wrap {
+    padding: 16px 18px calc(var(--mobile-nav-h) + env(safe-area-inset-bottom, 0px) + 28px);
+  }
+
+  /* ── Analyze Workspace: Single-Column Chess.com Stack ── */
+  .workspace {
+    display: flex;
+    flex-direction: column;
+    height: auto;
+    min-height: 0;
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: calc(var(--mobile-nav-h) + var(--mobile-dock-h) + env(safe-area-inset-bottom, 0px) + 14px);
+  }
+
+  .left-stage {
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    padding: 10px 14px 12px;
+    gap: 10px;
+    overflow: visible;
+    flex-shrink: 0;
+  }
+
+  /* Chester Coach Banner pinned neatly above the board (avatar left, bubble right — Chess.com style) */
+  .knight-coach-stage {
+    order: -1;
+    width: 100%;
+    max-width: 604px;
+    flex-direction: row-reverse;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+  }
+
+  .knight-mascot-btn,
+  .knight-pixel-svg {
+    width: 64px;
+    height: 64px;
+    flex-shrink: 0;
+  }
+
+  .knight-bubble {
+    flex: 1;
+    min-width: 0;
+    box-shadow: 3px 3px 0 var(--espresso);
+  }
+
+  .knight-bubble-header {
+    padding: 5px 9px;
+  }
+
+  .knight-speech-text {
+    font-size: 12.5px;
+    line-height: 1.42;
+    min-height: 40px;
+    max-height: 82px;
+    padding: 6px 10px;
+  }
+
+  .knight-bubble-tail {
+    display: none;
+  }
+
+  /* Board Assembly: Eval Bar flush left of 8x8 board, Utility Rail horizontal underneath */
+  .board-container {
+    width: 100%;
+    justify-content: center;
+    align-items: flex-start;
+    gap: var(--eval-gap);
+  }
+
+  .board-column {
+    gap: 6px;
+    align-items: center;
+  }
+
+  /* Unwrap .board-row so board-wrap and utility rail can be ordered cleanly in .board-column */
+  .board-row {
+    display: contents;
+  }
+
+  #top-player-bar { order: 1; }
+  #board-wrap     { order: 2; }
+  #bot-player-bar { order: 3; }
+
+  .board-utility-rail {
+    order: 4;
+    width: 100%;
+    flex-direction: row;
+    justify-content: space-between;
+    gap: 6px;
+    padding: 4px 6px;
+  }
+
+  .rail-btn {
+    flex: 1;
+    width: auto;
+    height: 36px;
+    flex-direction: row;
+    gap: 5px;
+    padding: 4px 6px;
+  }
+
+  .rail-icon {
+    font-size: 14px;
+  }
+
+  .rail-label {
+    font-size: 9.5px;
+    margin-top: 0;
+  }
+
+  /* Right Sidebar flows below the board with single page scroll (no trapped inner scrollbars) */
+  .right-sidebar {
+    border-left: none;
+    border-top: 2px solid var(--espresso);
+    height: auto;
+    overflow: visible;
+    flex-shrink: 0;
+    width: 100%;
+  }
+
+  .sidebar-tabs {
+    position: sticky;
+    top: 0;
+    z-index: 12;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .sidebar-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .tab-btn {
+    min-height: 42px;
+    padding: 10px 8px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  .tab-content {
+    overflow: visible;
+    flex: none;
+  }
+
+  .move-list-scroll,
+  .tab-scroll-pad,
+  .candidates-scroll,
+  .games-list,
+  .openings-view,
+  .candidates-section {
+    overflow: visible;
+    max-height: none;
+  }
+
+  .move-cell {
+    min-height: 36px;
+    padding: 6px 8px;
+  }
+
+  .cand-row td {
+    padding: 10px 8px;
+  }
+
+  /* Sticky Chess.com Playback & Action Dock pinned right above the Bottom Tab Bar */
+  .sidebar-footer {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: calc(var(--mobile-nav-h) + env(safe-area-inset-bottom, 0px));
+    z-index: 25;
+    padding: 6px 10px;
+    gap: 6px;
+    display: grid;
+    grid-template-columns: 1fr 1.35fr;
+    border-top: 2px solid var(--espresso);
+    background: var(--surface);
+  }
+
+  .sidebar-footer #btn-show-best {
+    grid-column: 1;
+    padding: 6px 8px;
+    font-size: 11px;
+    min-height: 34px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .sidebar-footer #analyse-btn {
+    grid-column: 2;
+    padding: 6px 10px;
+    font-size: 11px;
+    min-height: 34px;
+    box-shadow: 2px 2px 0 var(--espresso);
+  }
+
+  .sidebar-footer .nav-controls {
+    grid-column: 1 / -1;
+    gap: 6px;
+  }
+
+  .sidebar-footer .nav-btn {
+    min-height: 40px;
+    padding: 6px 0;
+    font-size: 15px;
+  }
+
+  .sidebar-footer .key-hint {
+    display: none;
+  }
+
+  /* iPad Portrait Responsive Grids (2-col where helpful, 1-col where dense) */
+  .charts-three-col {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .charts-three-col > :first-child {
+    grid-column: 1 / -1;
+  }
+
+  .charts-two-col,
+  .home-two-col,
+  .openings-two-col {
+    grid-template-columns: 1fr;
+  }
+
+  .endings-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* ── Tier 3: Mobile Phone (<= 767px) ── */
+@media (max-width: 767px) {
+  :root {
+    --eval-w: 20px;
+    --eval-gap: 5px;
+    --mobile-nav-h: 56px;
+    --mobile-dock-h: 86px;
+  }
+
+  .topbar {
+    padding: env(safe-area-inset-top, 0px) 10px 0;
+  }
+
+  .brand-tag {
+    display: none;
+  }
+
+  .brand-frame {
+    padding: 3px 7px;
+    gap: 6px;
+  }
+
+  .logo {
+    font-size: 13px;
+    letter-spacing: 0.09em;
+  }
+
+  .account-pill-btn {
+    padding: 3px 8px 3px 4px;
+    font-size: 10.5px;
+    gap: 5px;
+  }
+
+  .account-pill-avatar {
+    width: 20px;
+    height: 20px;
+    font-size: 10px;
+  }
+
+  /* Analyze Stage tightened so Board + Chester + Dock fit cleanly above the fold */
+  .left-stage {
+    padding: 6px 6px 8px;
+    gap: 6px;
+  }
+
+  .knight-coach-stage {
+    gap: 8px;
+  }
+
+  .knight-mascot-btn,
+  .knight-pixel-svg {
+    width: 50px;
+    height: 50px;
+  }
+
+  .knight-bubble-header {
+    padding: 4px 8px;
+  }
+
+  .knight-mood-label {
+    font-size: 9.5px;
+  }
+
+  .knight-mini-btn {
+    font-size: 10px;
+    padding: 3px 6px;
+    min-height: 26px;
+  }
+
+  .knight-speech-text {
+    font-size: 12px;
+    line-height: 1.38;
+    min-height: 34px;
+    max-height: 68px;
+    padding: 5px 8px;
+  }
+
+  .player-bar {
+    padding: 4px 8px;
+  }
+
+  .player-id {
+    gap: 6px;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .player-avatar {
+    width: 20px;
+    height: 20px;
+    font-size: 11px;
+    flex-shrink: 0;
+  }
+
+  .player-name {
+    font-size: 12.5px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .player-rating {
+    font-size: 11px;
+    flex-shrink: 0;
+  }
+
+  .player-clock {
+    font-size: 12px;
+    padding: 1px 7px;
+    flex-shrink: 0;
+  }
+
+  .eval-score {
+    font-size: 8.5px;
+    letter-spacing: -0.04em;
+  }
+
+  .square-badge {
+    width: 17px;
+    height: 17px;
+    font-size: 9.5px;
+    top: 2px;
+    right: 2px;
+  }
+
+  .chess-board .notation-322f9 {
+    font-size: 10px !important;
+    padding: 1px 2px !important;
+  }
+
+  .rail-btn {
+    height: 34px;
+    gap: 4px;
+  }
+
+  .rail-label {
+    font-size: 9px;
+  }
+
+  .best-move-strip,
+  .subgame-top {
+    flex-wrap: wrap;
+  }
+
+  /* Page Padding & Headers */
+  .view-scroll,
+  .home-dashboard-wrap {
+    padding: 12px 12px calc(var(--mobile-nav-h) + env(safe-area-inset-bottom, 0px) + 24px);
+  }
+
+  .section-title {
+    font-size: 15px;
+  }
+
+  .section-actions {
+    width: 100%;
+  }
+
+  .section-actions .btn {
+    flex: 1;
+    min-height: 36px;
+  }
+
+  .editorial-card {
+    padding: 12px;
+  }
+
+  /* 2-Column Mobile KPI & ELO Grids */
+  .elo-cards-grid,
+  .kpi-strip-grid,
+  .ins-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .elo-card-rating,
+  .elo-hero-num {
+    font-size: 20px;
+  }
+
+  .kpi-val {
+    font-size: 17px;
+  }
+
+  /* Pill Groups wrap smoothly without horizontal clipping */
+  .pill-groups {
+    width: 100%;
+  }
+
+  .pill-group {
+    flex-wrap: wrap;
+    max-width: 100%;
+  }
+
+  .pill-btn {
+    padding: 6px 9px;
+    font-size: 11px;
+    min-height: 32px;
+    flex: 1 0 auto;
+    border-bottom: 1px solid rgba(43, 26, 18, 0.14);
+  }
+
+  /* Insights Builder & Charts */
+  .builder-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .builder-group,
+  #ins-analyze-btn {
+    width: 100%;
+  }
+
+  .charts-three-col,
+  .charts-two-col,
+  .endings-grid,
+  .openings-two-col,
+  .home-two-col {
+    grid-template-columns: 1fr;
+  }
+
+  .charts-three-col > :first-child {
+    grid-column: auto;
+  }
+
+  .phase-bars-wrap {
+    gap: 10px;
+    padding: 6px 4px;
+  }
+
+  .phase-bar-bg {
+    width: 44px;
+  }
+
+  .donut-inner {
+    justify-content: center;
+  }
+
+  .saved-report-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .sr-stats {
+    justify-content: space-between;
+    width: 100%;
+    gap: 8px;
+  }
+
+  .sr-stat {
+    align-items: flex-start;
+  }
+
+  .matrix-table {
+    border-spacing: 4px;
+  }
+
+  .mx-cell {
+    padding: 6px 4px;
+    font-size: 13px;
+  }
+
+  /* ── MY GAMES: 2-Col Filters + Chess.com-Style Mobile Game Cards ── */
+  .filter-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .filter-search-item {
+    grid-column: 1 / -1;
+  }
+
+  .filter-search-item .text-input {
+    width: 100%;
+  }
+
+  .table-card {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    overflow: visible;
+  }
+
+  .lib-table-wrap {
+    overflow-x: visible;
+  }
+
+  .lib-table thead {
+    display: none;
+  }
+
+  .lib-table,
+  .lib-table tbody {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 100%;
+  }
+
+  .lib-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 6px 10px;
+    padding: 11px 12px;
+    border: 1.5px solid var(--espresso);
+    border-radius: 2px;
+    background: var(--surface);
+    box-shadow: 2px 2px 0 var(--espresso);
+  }
+
+  .lib-row td {
+    padding: 0;
+    border: none;
+    display: block;
+  }
+
+  /* Map the 7 table cells into a crisp Chess.com-style mobile card */
+  .lib-row td:nth-child(1) {
+    grid-column: 1;
+    grid-row: 1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .lib-row td:nth-child(3) {
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: end;
+    align-self: center;
+  }
+
+  .lib-row td:nth-child(2) {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    font-size: 13px;
+    line-height: 1.4;
+  }
+
+  .lib-row td:nth-child(4) {
+    grid-column: 1 / -1;
+    grid-row: 3;
+    max-width: none;
+    font-size: 11px;
+    white-space: normal;
+  }
+
+  .lib-row td:nth-child(5) {
+    grid-column: 1;
+    grid-row: 4;
+    align-self: center;
+  }
+
+  .lib-row td:nth-child(6) {
+    grid-column: 1;
+    grid-row: 5;
+    align-self: center;
+  }
+
+  .lib-row td:nth-child(7) {
+    grid-column: 2;
+    grid-row: 4 / span 2;
+    justify-self: end;
+    align-self: end;
+  }
+
+  .lib-row .lib-open-btn {
+    min-height: 34px;
+    padding: 6px 12px;
+  }
+
+  /* ── Landing Page Mobile Polish ── */
+  .lp-nav {
+    padding: 0 14px;
+  }
+
+  .lp-nav-inner {
+    height: 56px;
+    gap: 8px;
+  }
+
+  .lp-brand-name {
+    font-size: 14px;
+    letter-spacing: 0.1em;
+  }
+
+  .lp-nav-links {
+    gap: 8px;
+  }
+
+  .lp-signin-btn {
+    padding: 6px 12px;
+    font-size: 11.5px;
+  }
+
+  .lp-hero-band {
+    padding: 28px 16px 32px;
+    gap: 28px;
+  }
+
+  .lp-hero-grid {
+    gap: 32px;
+  }
+
+  .lp-hero-title {
+    font-size: clamp(30px, 9vw, 42px);
+  }
+
+  .lp-hero-actions {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .lp-btn-primary {
+    width: 100%;
+    text-align: center;
+  }
+
+  .lp-hero-visual {
+    justify-content: center;
+  }
+
+  .lp-portrait-stage {
+    width: 100%;
+    max-width: 310px;
+  }
+
+  .lp-speech-tag {
+    right: 4px;
+    top: -12px;
+    max-width: 220px;
+    font-size: 11px;
+    padding: 7px 10px;
+  }
+
+  .lp-portrait-art .knight-pixel-svg {
+    width: 168px;
+    height: 168px;
+  }
+
+  .lp-connect-bar {
+    padding: 16px;
+    gap: 14px;
+  }
+
+  .lp-connect-form {
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+  }
+
+  .lp-field-site,
+  .lp-field-user,
+  .lp-btn-dark {
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+  }
+
+  .lp-sand-band,
+  .lp-steps-band,
+  .lp-dark-cta {
+    padding: 40px 16px;
+  }
+
+  .lp-review-card {
+    padding: 16px;
+  }
+
+  .lp-footer {
+    padding: 16px;
+  }
+
+  /* ── Prevent iOS Safari Auto-Zoom on Focused Inputs & Sheet-Style Modal ── */
+  .text-input,
+  .lp-input,
+  .filter-select,
+  .quick-textarea,
+  .pgn-textarea {
+    font-size: 16px;
+  }
+
+  .user-search-row {
+    gap: 6px;
+  }
+
+  .user-search-row .text-input {
+    width: 100%;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .modal-backdrop {
+    padding: 10px;
+    align-items: flex-end;
+  }
+
+  .modal-card {
+    max-height: 88dvh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .modal-body {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 12px;
+  }
+
+  .setting-row {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  :root[data-theme="dark"] .lib-row {
+    box-shadow: 2px 2px 0 #090604;
+  }
+}
+
+@media (max-width: 480px) {
+  .modal-inline-row {
+    flex-direction: column;
+  }
+
+  .modal-inline-row .text-input {
+    width: 100%;
+  }
+
+  .conv-tac-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Dark mode polish for mobile bottom nav & sticky playback dock */
+:root[data-theme="dark"] .mobile-bottom-nav,
+:root[data-theme="dark"] .sidebar-footer {
+  border-top-color: rgba(241, 230, 216, 0.28);
 }
